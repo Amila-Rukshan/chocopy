@@ -1,0 +1,20 @@
+{
+    "name": "Chocopy Dev Env",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "vadimcn.vscode-lldb",
+                "llvm-vs-code-extensions.lldb-dap",
+                "llvm-vs-code-extensions.vscode-mlir"
+            ]
+        }
+    },
+    "postCreateCommand": "echo 'Container ready!'",
+    "remoteUser": "root"
+}
