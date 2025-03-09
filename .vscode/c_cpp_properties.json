@@ -1,0 +1,16 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "/usr/lib/llvm-17/include",
+                "/usr/include/llvm-17",
+                "/usr/include/llvm-c-17",
+                "/usr/include",
+                "/usr/local/include",
+                "${workspaceFolder}/**"
+            ]
+        }
+    ],
+    "version": 4
+}
