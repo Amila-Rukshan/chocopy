@@ -10,7 +10,7 @@
             "name": "Debug ChocoPy",
             "preLaunchTask": "Build (Debug)",
             "program": "${workspaceFolder}/build/chocopyc",
-            "args": [],
+            "args": ["${workspaceFolder}/tests/parse/def_func_args.py"],
             "cwd": "${workspaceFolder}"
         },
     ]
