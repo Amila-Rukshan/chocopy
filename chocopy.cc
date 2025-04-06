@@ -23,12 +23,20 @@ void parseInputFile(llvm::StringRef filename) {
   auto buffer = fileOrErr.get()->getBuffer();
   chocopy::LexerBuffer lexer(buffer.begin(), buffer.end(),
                              std::string(filename));
+
+  chocopy::TokenKind tk = lexer.getNextToken();
+  std::cout << tokenKindToString(tk) << "\n";
+  while (tk != chocopy::TokenKind::kEOF) {
+    tk = lexer.getNextToken();
+    std::cout << tokenKindToString(tk) << "\n";
+  }
 }
 
 int main(int argc, char** argv) {
   llvm::StringRef strRef = "ChocoPy Compiler";
   std::cout << strRef.str() << std::endl;
-  bool result = llvm::cl::ParseCommandLineOptions(argc, argv, "chocopy compiler\n");
+  bool result =
+      llvm::cl::ParseCommandLineOptions(argc, argv, "chocopy compiler\n");
   std::cout << inputFilename << std::endl;
   parseInputFile(inputFilename);
 }
