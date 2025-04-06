@@ -49,6 +49,7 @@ private:
     if (curLineBuffer.empty()) {
       curLineBuffer = readNextLine();
       processingLeadingSpaces = true;
+      indentDenentDone = false;
     }
     if (nextchar == '\n') {
       ++curLineNum;
@@ -62,41 +63,56 @@ private:
     if (lastChar == '\0') {
       lastChar = getNextChar();
     }
-    // keep ignoreing physical lines
-    // identifiy a logical line
-    // for logical lines generate indent token first
-
-    // generate dedented tokens
-    // if (currentLineIndentLevel < prevLineIndentLevel) {
-    //   prevLineIndentLevel = currentLineIndentLevel;
-    //   currentLineIndentLevel = 0;
-    //   return TokenKind::kDedent;
-    // }
-
-    // return any temporary saved token before generating indent token
-    if (firstTokenInIndentedLogicalLine != TokenKind::kUnknown) {
-      TokenKind savedToken = firstTokenInIndentedLogicalLine;
-      firstTokenInIndentedLogicalLine = TokenKind::kUnknown;
-      return savedToken;
-    }
 
     // generate end of line token for logical lines
     if (lastChar == '\n' && isLogicalLine) {
       isLogicalLine = false;
       lastChar = getNextChar();
-      // start of a new line save the indent level thprevious logical line
-      // prevLineIndentLevel = currentLineIndentLevel;
-      // currentLineIndentLevel = 0;
       return TokenKind::kNewLine;
     }
 
     if (processingLeadingSpaces) {
       // count leading spaces
+      uint16_t leadingSpacesCount = 0;
       while (lastChar == ' ') {
-        ++leadingSpacesCountInCurrentLine;
+        ++leadingSpacesCount;
         lastChar = getNextChar();
       }
+      if (leadingSpacesCount % kIndentSize != 0) {
+        // invalid indent
+        return TokenKind::kInvalidIndent;
+      }
+      currentLineIndentLevel = leadingSpacesCount / kIndentSize;
       processingLeadingSpaces = false;
+    }
+
+    if (!indentDenentDone) {
+      if ((currentLineIndentLevel - prevLineIndentLevel) > 1) {
+        // invalid indent
+        return TokenKind::kInvalidIndent;
+      }
+      if ((currentLineIndentLevel - prevLineIndentLevel) == 1) {
+        prevLineIndentLevel = currentLineIndentLevel;
+        currentLineIndentLevel = 0;
+        indentDenentDone = true;
+        return TokenKind::kIndent;
+      }
+      if (currentLineIndentLevel < prevLineIndentLevel) {
+        prevLineIndentLevel -= 1;
+        if (prevLineIndentLevel == currentLineIndentLevel) {
+          prevLineIndentLevel = currentLineIndentLevel;
+          indentDenentDone = true;
+        }
+        return TokenKind::kDedent;
+      }
+    }
+
+    // return any temporary saved token before generating indent token
+    if (indentDenentDone &&
+        firstTokenInIndentedLogicalLine != TokenKind::kUnknown) {
+      TokenKind savedToken = firstTokenInIndentedLogicalLine;
+      firstTokenInIndentedLogicalLine = TokenKind::kUnknown;
+      return savedToken;
     }
 
     TokenKind tokenKind = findToken();
@@ -105,23 +121,10 @@ private:
       isLogicalLine = true;
     }
 
-    if(isLogicalLine && (currentLineIndentLevel < prevLineIndentLevel)) {
-      prevLineIndentLevel -= 1;
-      return TokenKind::kDedent;
-    }
-
-    if (tokenKind != TokenKind::kUnknown &&
-        (leadingSpacesCountInCurrentLine >= 4) && isLogicalLine) {
+    if (tokenKind == TokenKind::kUnknown && isLogicalLine &&
+        !indentDenentDone) {
       // save the previous token kind before sending the indent token
-      // change the indent token generation logic to consider previous indent
-      // levels
       firstTokenInIndentedLogicalLine = tokenKind;
-      while (leadingSpacesCountInCurrentLine >= 4) {
-        leadingSpacesCountInCurrentLine -=
-            kIndentSize; // assume 4 spaces per indent
-        currentLineIndentLevel += 1;
-        return TokenKind::kIndent;
-      }
     }
 
     return tokenKind;
@@ -139,8 +142,6 @@ private:
     if (lastChar == '\0') {
       lastChar = getNextChar();
     }
-
-    TokenKind tokenKind = TokenKind::kUnknown;
 
     // Identifier: [a-zA-Z][a-zA-Z0-9_]*
     if (isalpha(lastChar) || lastChar == '_') {
@@ -402,8 +403,8 @@ private:
   int prevLineIndentLevel = 0;
   int currentLineIndentLevel = 0;
 
-  int leadingSpacesCountInCurrentLine = 0;
   bool processingLeadingSpaces = true;
+  bool indentDenentDone = false;
 };
 
 class LexerBuffer final : public Lexer {

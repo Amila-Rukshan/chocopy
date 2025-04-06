@@ -74,8 +74,9 @@ enum TokenKind {
   kAttrAccessOp,       // .
   kArrow,              // ->
 
-  kEOF,     // end of file
-  kUnknown, // unknown token
+  kEOF,           // end of file
+  kUnknown,       // unknown token
+  kInvalidIndent, // invalid indent token
 };
 
 std::string tokenKindToString(TokenKind kind) {
@@ -143,6 +144,7 @@ std::string tokenKindToString(TokenKind kind) {
       {TokenKind::kDedent, "kDedent"},
       {TokenKind::kEOF, "kEOF"},
       {TokenKind::kUnknown, "kUnknown"},
+      {TokenKind::kInvalidIndent, "kInvalidIndent"},
   };
 
   auto it = tokenKindMap.find(kind);

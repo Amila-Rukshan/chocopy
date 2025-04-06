@@ -33,10 +33,6 @@ void parseInputFile(llvm::StringRef filename) {
 }
 
 int main(int argc, char** argv) {
-  llvm::StringRef strRef = "ChocoPy Compiler";
-  std::cout << strRef.str() << std::endl;
-  bool result =
-      llvm::cl::ParseCommandLineOptions(argc, argv, "chocopy compiler\n");
-  std::cout << inputFilename << std::endl;
+  llvm::cl::ParseCommandLineOptions(argc, argv, "chocopy compiler\n");
   parseInputFile(inputFilename);
 }
