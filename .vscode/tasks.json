@@ -12,5 +12,16 @@
           "isDefault": true
         }
       },
+      {
+        "label": "Build Test (Debug)",
+        "type": "shell",
+        "linux": {
+          "command": "rm -rf build && mkdir -p ${workspaceFolder}/build && cd ${workspaceFolder}/build && cmake -G Ninja -DENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug .. && cmake --build ."
+        },
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        }
+      }
     ]
 }

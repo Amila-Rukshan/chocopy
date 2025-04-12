@@ -10,8 +10,16 @@
             "name": "Debug ChocoPy",
             "preLaunchTask": "Build (Debug)",
             "program": "${workspaceFolder}/build/chocopyc",
-            "args": ["${workspaceFolder}/tests/parse/def_func_args.py"],
+            "args": ["${workspaceFolder}/tests/parse/def_func_nested.py"],
             "cwd": "${workspaceFolder}"
         },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Lexer Tests",
+            "preLaunchTask":  "Build Test (Debug)",
+            "program": "${workspaceFolder}/build/unittests/Lexer/LexerTest",
+            "cwd": "${workspaceFolder}"
+        }
     ]
 }

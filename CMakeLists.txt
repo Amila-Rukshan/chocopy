@@ -34,8 +34,27 @@ set(CMAKE_CXX_COMPILER "/usr/bin/clang++-17")
 
 include_directories(include/)
 
-add_executable(chocopyc chocopy.cc)
+add_executable(chocopyc ChocoPy.cpp)
 
 target_link_libraries(chocopyc
   PRIVATE
-    MLIRSupport)
+  MLIRSupport)
+
+option(ENABLE_TESTS "Enable unit tests" OFF)
+
+if(ENABLE_TESTS)
+  include(FetchContent)
+  FetchContent_Declare(
+    googletest
+
+    # Specify the commit you depend on and update it regularly.
+    URL https://github.com/google/googletest/archive/5376968f6948923e2411081fd9372e71a59d8e77.zip
+  )
+  # For Windows: Prevent overriding the parent project's compiler/linker settings
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+
+  enable_testing()
+
+  add_subdirectory(unittests)
+endif()

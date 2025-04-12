@@ -7,11 +7,6 @@
 namespace chocopy {
 
 enum TokenKind {
-  // indentation tokens
-  kNewLine,
-  kIndent,
-  kDedent,
-
   // keywords
   k_False,    // False
   k_None,     // None
@@ -73,6 +68,11 @@ enum TokenKind {
   kColon,              // :
   kAttrAccessOp,       // .
   kArrow,              // ->
+
+  // indentation tokens
+  kNewLine,
+  kIndent,
+  kDedent,
 
   kEOF,           // end of file
   kUnknown,       // unknown token

@@ -8,7 +8,8 @@
                 "/usr/include/llvm-c-17",
                 "/usr/include",
                 "/usr/local/include",
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/build/_deps/googletest-src/googletest/include"
             ]
         }
     ],

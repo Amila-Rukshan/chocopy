@@ -5,7 +5,7 @@
 #include <array>
 #include <string>
 
-#include "token.h"
+#include "Token.h"
 
 #include "llvm/ADT/StringRef.h"
 
@@ -48,8 +48,6 @@ private:
     curLineBuffer = curLineBuffer.drop_front();
     if (curLineBuffer.empty()) {
       curLineBuffer = readNextLine();
-      processingLeadingSpaces = true;
-      indentDenentDone = false;
     }
     if (nextchar == '\n') {
       ++curLineNum;
@@ -64,11 +62,18 @@ private:
       lastChar = getNextChar();
     }
 
+    if (lastChar == '\n') {
+      processingLeadingSpaces = true;
+      indentDenentDone = false;
+    }
+
     // generate end of line token for logical lines
-    if (lastChar == '\n' && isLogicalLine) {
-      isLogicalLine = false;
+    if (lastChar == '\n') {
+      if (isLogicalLine) {
+        isLogicalLine = false;
+        return TokenKind::kNewLine;
+      }
       lastChar = getNextChar();
-      return TokenKind::kNewLine;
     }
 
     if (processingLeadingSpaces) {
@@ -80,13 +85,15 @@ private:
       }
       if (leadingSpacesCount % kIndentSize != 0) {
         // invalid indent
+        processingLeadingSpaces = false;
         return TokenKind::kInvalidIndent;
       }
       currentLineIndentLevel = leadingSpacesCount / kIndentSize;
       processingLeadingSpaces = false;
     }
 
-    if (!indentDenentDone) {
+    if (isLogicalLine && !indentDenentDone && !processingLeadingSpaces) {
+
       if ((currentLineIndentLevel - prevLineIndentLevel) > 1) {
         // invalid indent
         return TokenKind::kInvalidIndent;
@@ -101,10 +108,13 @@ private:
         prevLineIndentLevel -= 1;
         if (prevLineIndentLevel == currentLineIndentLevel) {
           prevLineIndentLevel = currentLineIndentLevel;
+          currentLineIndentLevel = 0;
           indentDenentDone = true;
         }
         return TokenKind::kDedent;
       }
+      currentLineIndentLevel = 0;
+      indentDenentDone = true;
     }
 
     // return any temporary saved token before generating indent token
@@ -121,10 +131,11 @@ private:
       isLogicalLine = true;
     }
 
-    if (tokenKind == TokenKind::kUnknown && isLogicalLine &&
-        !indentDenentDone) {
+    if (tokenKind <= 57 && isLogicalLine && !indentDenentDone) {
       // save the previous token kind before sending the indent token
       firstTokenInIndentedLogicalLine = tokenKind;
+      // return indent/dedent tokens
+      return getToken();
     }
 
     return tokenKind;

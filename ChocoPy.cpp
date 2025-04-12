@@ -1,7 +1,7 @@
 #include <iostream>
 #include <memory>
 
-#include "lexer.h"
+#include "Lexer.h"
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
