@@ -62,18 +62,11 @@ private:
       lastChar = getNextChar();
     }
 
-    if (lastChar == '\n') {
-      processingLeadingSpaces = true;
-      indentDenentDone = false;
-    }
-
-    // generate end of line token for logical lines
-    if (lastChar == '\n') {
-      if (isLogicalLine) {
-        isLogicalLine = false;
-        return TokenKind::kNewLine;
-      }
+    if (lastChar == '\n' && curLineNum == 1 && curCol == 0) {
       lastChar = getNextChar();
+      while (isspace(lastChar)) {
+        lastChar = getNextChar();
+      }
     }
 
     if (processingLeadingSpaces) {
@@ -125,13 +118,27 @@ private:
       return savedToken;
     }
 
+    if (lastChar == '\n') {
+      processingLeadingSpaces = true;
+      indentDenentDone = false;
+    }
+
+    // generate end of line token for logical lines
+    if (lastChar == '\n') {
+      lastChar = getNextChar();
+      if (isLogicalLine) {
+        isLogicalLine = false;
+        return TokenKind::kNewLine;
+      }
+    }
+
     TokenKind tokenKind = findToken();
 
     if (!isLogicalLine && tokenKind != TokenKind::kUnknown) {
       isLogicalLine = true;
     }
 
-    if (tokenKind <= 57 && isLogicalLine && !indentDenentDone) {
+    if (tokenKind <= 58 && isLogicalLine && !indentDenentDone) {
       // save the previous token kind before sending the indent token
       firstTokenInIndentedLogicalLine = tokenKind;
       // return indent/dedent tokens

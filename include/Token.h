@@ -68,13 +68,13 @@ enum TokenKind {
   kColon,              // :
   kAttrAccessOp,       // .
   kArrow,              // ->
+  kEOF,           // end of file
 
   // indentation tokens
   kNewLine,
   kIndent,
   kDedent,
 
-  kEOF,           // end of file
   kUnknown,       // unknown token
   kInvalidIndent, // invalid indent token
 };
