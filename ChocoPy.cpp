@@ -26,9 +26,15 @@ void parseInputFile(llvm::StringRef filename) {
 
   chocopy::TokenKind tk = lexer.getNextToken();
   std::cout << tokenKindToString(tk) << "\n";
+  std::cout << lexer.getLastLocation().file.get()->data() << ":"
+            << lexer.getLastLocation().line << ":"
+            << lexer.getLastLocation().col << "\n";
   while (tk != chocopy::TokenKind::kEOF) {
     tk = lexer.getNextToken();
     std::cout << tokenKindToString(tk) << "\n";
+    std::cout << lexer.getLastLocation().file.get()->data() << ":"
+              << lexer.getLastLocation().line << ":"
+              << lexer.getLastLocation().col << "\n";
   }
 }
 

@@ -76,10 +76,18 @@ private:
         ++leadingSpacesCount;
         lastChar = getNextChar();
       }
-      if (leadingSpacesCount % kIndentSize != 0) {
-        // invalid indent
-        processingLeadingSpaces = false;
-        return TokenKind::kInvalidIndent;
+      if (lastChar == '\n') {
+        lastChar = getNextChar();
+        return getToken();
+      }
+      if (lastChar == '#') {
+        // comment until end of line.
+        do {
+          lastChar = getNextChar();
+        } while (lastChar != EOF && lastChar != '\n');
+
+        if (lastChar != EOF)
+          return getToken();
       }
       currentLineIndentLevel = leadingSpacesCount / kIndentSize;
       processingLeadingSpaces = false;
@@ -118,20 +126,6 @@ private:
       return savedToken;
     }
 
-    if (lastChar == '\n') {
-      processingLeadingSpaces = true;
-      indentDenentDone = false;
-    }
-
-    // generate end of line token for logical lines
-    if (lastChar == '\n') {
-      lastChar = getNextChar();
-      if (isLogicalLine) {
-        isLogicalLine = false;
-        return TokenKind::kNewLine;
-      }
-    }
-
     TokenKind tokenKind = findToken();
 
     if (!isLogicalLine && tokenKind != TokenKind::kUnknown) {
@@ -151,11 +145,21 @@ private:
   TokenKind findToken() {
 
     // ignore spaces non leading spaces
-    while (isspace(lastChar))
+    while (isspace(lastChar) && lastChar != '\n')
       lastChar = getNextChar();
 
     lastLocation.line = curLineNum;
     lastLocation.col = curCol;
+
+    if (lastChar == '\n') {
+      processingLeadingSpaces = true;
+      indentDenentDone = false;
+      lastChar = getNextChar();
+      if (isLogicalLine) {
+        isLogicalLine = false;
+        return TokenKind::kNewLine;
+      }
+    }
 
     if (lastChar == '\0') {
       lastChar = getNextChar();
@@ -289,6 +293,7 @@ private:
         }
         lastChar = getNextChar();
       }
+      lastChar = getNextChar();
       return TokenKind::kStringLiteral;
     }
 
