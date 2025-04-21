@@ -2,7 +2,9 @@
 #include <memory>
 
 #include "Lexer.h"
+#include "Parser.h"
 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorOr.h"
@@ -21,21 +23,21 @@ void parseInputFile(llvm::StringRef filename) {
     return;
   }
   auto buffer = fileOrErr.get()->getBuffer();
-  std::unique_ptr<chocopy::Lexer> lexer =
-      std::make_unique<chocopy::LexerBuffer>(buffer.begin(), buffer.end(),
-                                             std::string(filename));
+  chocopy::LexerBuffer lexer(buffer.begin(), buffer.end(),
+                             std::string(filename));
+  chocopy::Parser parser(lexer);
+  std::unique_ptr<chocopy::ProgramAST> program = parser.parseProgram();
 
-  chocopy::TokenKind tk = lexer->getNextToken();
-  std::cout << tokenKindToString(tk) << "\n";
-  // std::cout << lexer.getLastLocation().file.get()->data() << ":"
-  //           << lexer.getLastLocation().line << ":"
-  //           << lexer.getLastLocation().col << "\n";
-  while (tk != chocopy::TokenKind::kEOF) {
-    tk = lexer->getNextToken();
-    std::cout << tokenKindToString(tk) << "\n";
-    // std::cout << lexer.getLastLocation().file.get()->data() << ":"
-    //           << lexer.getLastLocation().line << ":"
-    //           << lexer.getLastLocation().col << "\n";
+  const auto& varDefs = program->getVarDefs();
+
+  if (varDefs.size() >= 3) {
+    // get the third varDef and do a dynamic cast to get the actual nested list
+    // type
+    auto varDef = varDefs[2].get();
+    auto type = varDef->getTypedVar()->getType();
+    auto listTypeAST = llvm::dyn_cast<chocopy::ListTypeAST>(type);
+    auto innerType = listTypeAST->getType();
+    auto innerIdType = llvm::dyn_cast<chocopy::ListTypeAST>(innerType);
   }
 }
 

@@ -8,6 +8,7 @@
 #include "Token.h"
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace chocopy {
 
@@ -24,6 +25,15 @@ public:
   TokenKind getCurToken() { return curTok; }
 
   TokenKind getNextToken() { return curTok = getToken(); }
+
+  void consume(TokenKind tok) {
+    if (tok != curTok) {
+      llvm::errs() << "Token mismatch: expected " << tokenKindToString(tok)
+                   << ", but got " << tokenKindToString(curTok) << "\n";
+    }
+    assert(tok == curTok && "consume Token mismatch expectation");
+    getNextToken();
+  }
 
   Location getLastLocation() { return lastLocation; }
 

@@ -1,8 +1,6 @@
 #ifndef CHOCOPY_AST_H
 #define CHOCOPY_AST_H
 
-#include "Lexer.h"
-
 #include <llvm/ADT/StringRef.h>
 
 #include <memory>
@@ -10,6 +8,10 @@
 #include <vector>
 
 namespace chocopy {
+
+class VarDefAST;
+class StmtAST;
+class ExprAST;
 
 /***********************************/
 /* Program                         */
@@ -84,6 +86,11 @@ public:
 
   const TypeAST* getType() const { return type.get(); }
 
+  /// LLVM style RTTI
+  static bool classof(const TypeAST* c) {
+    return c->getKind() == TypeAST::Type_List;
+  }
+
 private:
   std::unique_ptr<TypeAST> type;
 };
@@ -94,8 +101,9 @@ private:
 
 class TypedVarAST {
 public:
-  TypedVarAST(std::string id, std::unique_ptr<TypeAST> type)
-      : id(std::move(id)), type(std::move(type)) {}
+  TypedVarAST(std::string id, Location location, std::unique_ptr<TypeAST> type)
+      : id(std::move(id)), type(std::move(type)),
+        location(std::move(location)) {}
 
   const llvm::StringRef getId() const { return id; }
 
