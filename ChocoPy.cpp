@@ -21,20 +21,21 @@ void parseInputFile(llvm::StringRef filename) {
     return;
   }
   auto buffer = fileOrErr.get()->getBuffer();
-  chocopy::LexerBuffer lexer(buffer.begin(), buffer.end(),
-                             std::string(filename));
+  std::unique_ptr<chocopy::Lexer> lexer =
+      std::make_unique<chocopy::LexerBuffer>(buffer.begin(), buffer.end(),
+                                             std::string(filename));
 
-  chocopy::TokenKind tk = lexer.getNextToken();
+  chocopy::TokenKind tk = lexer->getNextToken();
   std::cout << tokenKindToString(tk) << "\n";
-  std::cout << lexer.getLastLocation().file.get()->data() << ":"
-            << lexer.getLastLocation().line << ":"
-            << lexer.getLastLocation().col << "\n";
+  // std::cout << lexer.getLastLocation().file.get()->data() << ":"
+  //           << lexer.getLastLocation().line << ":"
+  //           << lexer.getLastLocation().col << "\n";
   while (tk != chocopy::TokenKind::kEOF) {
-    tk = lexer.getNextToken();
+    tk = lexer->getNextToken();
     std::cout << tokenKindToString(tk) << "\n";
-    std::cout << lexer.getLastLocation().file.get()->data() << ":"
-              << lexer.getLastLocation().line << ":"
-              << lexer.getLastLocation().col << "\n";
+    // std::cout << lexer.getLastLocation().file.get()->data() << ":"
+    //           << lexer.getLastLocation().line << ":"
+    //           << lexer.getLastLocation().col << "\n";
   }
 }
 

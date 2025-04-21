@@ -68,7 +68,7 @@ enum TokenKind {
   kColon,              // :
   kAttrAccessOp,       // .
   kArrow,              // ->
-  kEOF,           // end of file
+  kEOF,                // end of file
 
   // indentation tokens
   kNewLine,
