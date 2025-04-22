@@ -98,7 +98,7 @@ private:
         }
         auto listType = llvm::dyn_cast<ListTypeAST>(type.get());
         if (listType) {
-          return std::move(type);
+          return type;
         }
         int dimensionTemp = dimension;
         dimension = 0;

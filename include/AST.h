@@ -1,6 +1,8 @@
 #ifndef CHOCOPY_AST_H
 #define CHOCOPY_AST_H
 
+#include "Token.h"
+
 #include <llvm/ADT/StringRef.h>
 
 #include <memory>
@@ -95,6 +97,7 @@ public:
         dimension(dimension) {}
 
   const TypeAST* getType() const { return type.get(); }
+  int getDimension() const { return dimension; }
 
   /// LLVM style RTTI
   static bool classof(const TypeAST* c) {
@@ -158,18 +161,33 @@ class LiteralNoneAST : public LiteralAST {
 public:
   LiteralNoneAST(Location location)
       : LiteralAST(LiteralAST::Literal_None, std::move(location)) {}
+
+  /// LLVM style RTTI
+  static bool classof(const LiteralAST* c) {
+    return c->getKind() == LiteralAST::Literal_None;
+  }
 };
 
 class LiteralTrueAST : public LiteralAST {
 public:
   LiteralTrueAST(Location location)
       : LiteralAST(LiteralAST::Literal_True, std::move(location)) {}
+
+  /// LLVM style RTTI
+  static bool classof(const LiteralAST* c) {
+    return c->getKind() == LiteralAST::Literal_True;
+  }
 };
 
 class LiteralFalseAST : public LiteralAST {
 public:
   LiteralFalseAST(Location location)
       : LiteralAST(LiteralAST::Literal_False, std::move(location)) {}
+
+  /// LLVM style RTTI
+  static bool classof(const LiteralAST* c) {
+    return c->getKind() == LiteralAST::Literal_False;
+  }
 };
 
 class LiteralNumberAST : public LiteralAST {
@@ -179,6 +197,11 @@ public:
         number(number) {}
 
   int getNumber() const { return number; }
+
+  /// LLVM style RTTI
+  static bool classof(const LiteralAST* c) {
+    return c->getKind() == LiteralAST::Literal_Number;
+  }
 
 private:
   const int number;
@@ -192,6 +215,11 @@ public:
 
   const llvm::StringRef getStr() const { return str; }
 
+  /// LLVM style RTTI
+  static bool classof(const LiteralAST* c) {
+    return c->getKind() == LiteralAST::Literal_String;
+  }
+
 private:
   const std::string str;
 };
@@ -203,6 +231,11 @@ public:
         id(std::move(id)) {}
 
   const llvm::StringRef getId() const { return id; }
+
+  /// LLVM style RTTI
+  static bool classof(const LiteralAST* c) {
+    return c->getKind() == LiteralAST::Literal_IdString;
+  }
 
 private:
   const std::string id;

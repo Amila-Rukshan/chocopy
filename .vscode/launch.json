@@ -20,6 +20,14 @@
             "preLaunchTask":  "Build Test (Debug)",
             "program": "${workspaceFolder}/build/unittests/Lexer/LexerTest",
             "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Parser Tests",
+            "preLaunchTask":  "Build Test (Debug)",
+            "program": "${workspaceFolder}/build/unittests/Parser/ParserTest",
+            "cwd": "${workspaceFolder}"
         }
     ]
 }
