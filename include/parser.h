@@ -6,6 +6,7 @@
 #include "AST.h"
 #include "Lexer.h"
 
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace chocopy {
@@ -76,6 +77,8 @@ private:
 
   std::unique_ptr<TypeAST> parseType() {
     std::unique_ptr<TypeAST> type;
+    // track the number of dimensions for list types
+    static int dimension = 0;
 
     switch (lexer.getCurToken()) {
     case TokenKind::kIdentifier:
@@ -86,18 +89,25 @@ private:
                                                lexer.getStringLiteral());
     case TokenKind::kOpenSquareBracket:
       lexer.getNextToken();
+      dimension += 1;
       type = parseType();
       if (type) {
         lexer.getNextToken();
         if (lexer.getCurToken() != TokenKind::kCloseSquareBracket) {
           return parseError<TypeAST>("]", "after type");
         }
+        auto listType = llvm::dyn_cast<ListTypeAST>(type.get());
+        if (listType) {
+          return std::move(type);
+        }
+        int dimensionTemp = dimension;
+        dimension = 0;
         return std::make_unique<ListTypeAST>(lexer.getLastLocation(),
-                                             std::move(type));
+                                             std::move(type), dimensionTemp);
       }
       break;
     default:
-      return parseError<TypeAST>("identifier or string literal",
+      return parseError<TypeAST>("identifier or string literal or list type",
                                  "when expecting a type");
       break;
     }

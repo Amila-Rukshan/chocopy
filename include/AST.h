@@ -62,6 +62,11 @@ public:
 
   const llvm::StringRef getId() const { return id; }
 
+  /// LLVM style RTTI
+  static bool classof(const TypeAST* c) {
+    return c->getKind() == TypeAST::Type_Id;
+  }
+
 private:
   const std::string id;
 };
@@ -74,15 +79,20 @@ public:
 
   const llvm::StringRef getId() const { return id; }
 
+  /// LLVM style RTTI
+  static bool classof(const TypeAST* c) {
+    return c->getKind() == TypeAST::Type_IdString;
+  }
+
 private:
   const std::string id;
 };
 
 class ListTypeAST : public TypeAST {
 public:
-  ListTypeAST(Location location, std::unique_ptr<TypeAST> type)
-      : TypeAST(TypeAST::Type_List, std::move(location)),
-        type(std::move(type)) {}
+  ListTypeAST(Location location, std::unique_ptr<TypeAST> type, int dimension)
+      : TypeAST(TypeAST::Type_List, std::move(location)), type(std::move(type)),
+        dimension(dimension) {}
 
   const TypeAST* getType() const { return type.get(); }
 
@@ -93,6 +103,7 @@ public:
 
 private:
   std::unique_ptr<TypeAST> type;
+  int dimension = 0;
 };
 
 /***********************************/

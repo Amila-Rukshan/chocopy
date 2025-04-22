@@ -30,14 +30,14 @@ void parseInputFile(llvm::StringRef filename) {
 
   const auto& varDefs = program->getVarDefs();
 
-  if (varDefs.size() >= 3) {
+  if (varDefs.size() >= 4) {
     // get the third varDef and do a dynamic cast to get the actual nested list
     // type
-    auto varDef = varDefs[2].get();
+    auto varDef = varDefs[3].get();
     auto type = varDef->getTypedVar()->getType();
     auto listTypeAST = llvm::dyn_cast<chocopy::ListTypeAST>(type);
     auto innerType = listTypeAST->getType();
-    auto innerIdType = llvm::dyn_cast<chocopy::ListTypeAST>(innerType);
+    auto innerIdType = llvm::dyn_cast<chocopy::IdTypeAST>(innerType);
   }
 }
 
