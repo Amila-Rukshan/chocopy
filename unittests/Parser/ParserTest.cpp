@@ -77,4 +77,33 @@ qw: [[[bool]]] = "hello" # this can be parsed, but semantically not sound
   EXPECT_EQ(strLiteralAST->getStr(), "hello");
 }
 
+// Test top level simple statements
+TEST(ParserTest, TestGlobalSimpleStatements) {
+  std::string program = R"(
+return
+pass
+)";
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  Parser parser(lexer);
+  auto programAST = parser.parseProgram();
+
+  ASSERT_NE(programAST, nullptr);
+  const auto& simpleStmts = programAST->getStmts();
+  ASSERT_EQ(simpleStmts.size(), 2);
+
+  // check that the first statement is a return statement
+  auto simpleStmt1 = llvm::dyn_cast<SimpleStmtAST>(simpleStmts[0].get());
+  ASSERT_NE(simpleStmt1, nullptr);
+  auto simpleStmtReturn = llvm::dyn_cast<SimpleStmtReturnAST>(simpleStmt1);
+  ASSERT_NE(simpleStmtReturn, nullptr);
+  EXPECT_EQ(simpleStmtReturn->getExpr(), nullptr);
+
+  // check that the second statement is a pass statement
+  auto simpleStmt2 = llvm::dyn_cast<SimpleStmtAST>(simpleStmts[1].get());
+  ASSERT_NE(simpleStmt2, nullptr);
+  auto simpleStmtPass = llvm::dyn_cast<SimpleStmtPassAST>(simpleStmt2);
+  ASSERT_NE(simpleStmtPass, nullptr);
+}
+
 } // namespace chocopy

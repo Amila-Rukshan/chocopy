@@ -291,6 +291,13 @@ public:
   SimpleStmtAST(Location location, SimpleStmtASTKind kind)
       : StmtAST(StmtASTKind::Stmt_Simple, std::move(location)), kind(kind) {}
 
+  SimpleStmtASTKind getKind() const { return kind; }
+
+  /// LLVM style RTTI
+  static bool classof(const StmtAST* c) {
+    return c->getKind() == StmtASTKind::Stmt_Simple;
+  }
+
 private:
   const SimpleStmtASTKind kind;
 };
@@ -299,6 +306,11 @@ class SimpleStmtPassAST : public SimpleStmtAST {
 public:
   SimpleStmtPassAST(Location location)
       : SimpleStmtAST(std::move(location), SimpleStmtAST::SimpleStmt_Pass) {}
+
+  /// LLVM style RTTI
+  static bool classof(const SimpleStmtAST* c) {
+    return c->getKind() == SimpleStmtAST::SimpleStmt_Pass;
+  }
 };
 
 class SimpleStmtExprAST : public SimpleStmtAST {
@@ -308,6 +320,11 @@ public:
         expr(std::move(expr)) {}
 
   const ExprAST* getExpr() const { return expr.get(); }
+
+  /// LLVM style RTTI
+  static bool classof(const SimpleStmtAST* c) {
+    return c->getKind() == SimpleStmtAST::SimpleStmt_Expr;
+  }
 
 private:
   std::unique_ptr<ExprAST> expr;
@@ -320,6 +337,11 @@ public:
         expr(std::move(expr)) {}
 
   const ExprAST* getExpr() const { return expr.get(); }
+
+  /// LLVM style RTTI
+  static bool classof(const SimpleStmtAST* c) {
+    return c->getKind() == SimpleStmtAST::SimpleStmt_Return;
+  }
 
 private:
   std::unique_ptr<ExprAST> expr;
@@ -338,6 +360,11 @@ public:
   }
 
   const ExprAST* getRhs() const { return rhs.get(); }
+
+  /// LLVM style RTTI
+  static bool classof(const SimpleStmtAST* c) {
+    return c->getKind() == SimpleStmtAST::SimpleStmt_Assign;
+  }
 
 private:
   std::vector<std::unique_ptr<ExprAST>> targets;

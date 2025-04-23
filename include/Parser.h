@@ -31,19 +31,32 @@ public:
       std::string id = lexer.getIdentifier();
       switch (lexer.getCurToken()) {
       case TokenKind::kIdentifier:
-        lexer.getNextToken();
-        if (lexer.getCurToken() == TokenKind::kColon) {
-          varDefs.push_back(parseVarDef(id, location));
+        if (lexer.peekNextToken() == TokenKind::kColon) {
+          varDefs.push_back(parseVarDef());
         } else {
-          // parse statements that start with an identifier
+          // parse simple statements that start with an identifier
+          stmts.push_back(parseSimpleStmt());
           break;
         }
         break;
+      case TokenKind::k_pass:
+      case TokenKind::k_return:
+        stmts.push_back(parseSimpleStmt());
+        break;
+      case TokenKind::k_for:
+        // parse for loop
+      case TokenKind::k_while:
+        // parse while loop
+      case TokenKind::k_if:
+        // parse if statement
+      case TokenKind::k_def:
+        // parse function definition
+      case TokenKind::k_class:
+        // parse class definition
       default:
         lexer.getNextToken();
         break;
       case TokenKind::kEOF:
-        std::cout << "EOF\n";
         return std::make_unique<ProgramAST>(std::move(varDefs),
                                             std::move(stmts));
       }
@@ -54,7 +67,30 @@ public:
 private:
   Lexer& lexer;
 
-  std::unique_ptr<VarDefAST> parseVarDef(std::string id, Location idLocation) {
+  std::unique_ptr<SimpleStmtAST> parseSimpleStmt() {
+    switch (lexer.getCurToken()) {
+    case TokenKind::k_pass:
+      lexer.getNextToken();
+      lexer.consume(TokenKind::kNewLine);
+      return std::make_unique<SimpleStmtPassAST>(lexer.getLastLocation());
+    case TokenKind::k_return:
+      if (lexer.peekNextToken() == TokenKind::kNewLine) {
+        lexer.getNextToken();
+        lexer.consume(TokenKind::kNewLine);
+        return std::make_unique<SimpleStmtReturnAST>(lexer.getLastLocation(),
+                                                     nullptr);
+      }
+    default:
+      break;
+    }
+    return nullptr;
+  }
+
+  std::unique_ptr<VarDefAST> parseVarDef() {
+    lexer.getNextToken();
+    std::string id = lexer.getIdentifier();
+    Location idLocation = lexer.getLastLocation();
+
     lexer.getNextToken();
     std::unique_ptr<TypeAST> type = parseType();
     if (!type) {

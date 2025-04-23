@@ -26,6 +26,16 @@ public:
 
   TokenKind getNextToken() { return curTok = getToken(); }
 
+  TokenKind peekNextToken(size_t lookahead = 1) {
+    LexerState savedState = saveState();
+    TokenKind tokenKind = TokenKind::kUnknown;
+    for (size_t i = 0; i < lookahead; ++i) {
+      tokenKind = getToken();
+    }
+    restoreState(savedState);
+    return tokenKind;
+  }
+
   void consume(TokenKind tok) {
     if (tok != curTok) {
       llvm::errs() << "Token mismatch: expected " << tokenKindToString(tok)
@@ -415,6 +425,60 @@ private:
       return TokenKind::kEOF;
 
     return TokenKind::kUnknown;
+  }
+
+  struct LexerState {
+    Location lastLocation;
+    int curLineNum;
+    int curCol;
+    llvm::StringRef curLineBuffer;
+    TokenKind curTok;
+    TokenKind firstTokenInIndentedLogicalLine;
+    std::string identifierStr;
+    int64_t intValue;
+    std::string strLiteral;
+    char lastChar;
+    bool isLogicalLine;
+    int prevLineIndentLevel;
+    int currentLineIndentLevel;
+    bool processingLeadingSpaces;
+    bool indentDenentDone;
+  };
+
+  LexerState saveState() const {
+    return LexerState{lastLocation,
+                      curLineNum,
+                      curCol,
+                      curLineBuffer,
+                      curTok,
+                      firstTokenInIndentedLogicalLine,
+                      identifierStr,
+                      intValue,
+                      strLiteral,
+                      lastChar,
+                      isLogicalLine,
+                      prevLineIndentLevel,
+                      currentLineIndentLevel,
+                      processingLeadingSpaces,
+                      indentDenentDone};
+  }
+
+  void restoreState(const LexerState& state) {
+    lastLocation = state.lastLocation;
+    curLineNum = state.curLineNum;
+    curCol = state.curCol;
+    curLineBuffer = state.curLineBuffer;
+    curTok = state.curTok;
+    firstTokenInIndentedLogicalLine = state.firstTokenInIndentedLogicalLine;
+    identifierStr = state.identifierStr;
+    intValue = state.intValue;
+    strLiteral = state.strLiteral;
+    lastChar = state.lastChar;
+    isLogicalLine = state.isLogicalLine;
+    prevLineIndentLevel = state.prevLineIndentLevel;
+    currentLineIndentLevel = state.currentLineIndentLevel;
+    processingLeadingSpaces = state.processingLeadingSpaces;
+    indentDenentDone = state.indentDenentDone;
   }
 
   Location lastLocation;
