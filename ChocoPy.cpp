@@ -29,16 +29,6 @@ void parseInputFile(llvm::StringRef filename) {
   std::unique_ptr<chocopy::ProgramAST> program = parser.parseProgram();
 
   const auto& varDefs = program->getVarDefs();
-
-  if (varDefs.size() >= 4) {
-    // get the third varDef and do a dynamic cast to get the actual nested list
-    // type
-    auto varDef = varDefs[3].get();
-    auto type = varDef->getTypedVar()->getType();
-    auto listTypeAST = llvm::dyn_cast<chocopy::ListTypeAST>(type);
-    auto innerType = listTypeAST->getType();
-    auto innerIdType = llvm::dyn_cast<chocopy::IdTypeAST>(innerType);
-  }
 }
 
 int main(int argc, char** argv) {

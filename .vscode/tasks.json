@@ -13,10 +13,21 @@
         }
       },
       {
-        "label": "Build Test (Debug)",
+        "label": "Build Lexer Test (Debug)",
         "type": "shell",
         "linux": {
-          "command": "mkdir -p ${workspaceFolder}/build && cd ${workspaceFolder}/build && cmake -G Ninja -DENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug .. && cmake --build ."
+          "command": "mkdir -p ${workspaceFolder}/build && cd ${workspaceFolder}/build && cmake -G Ninja -DENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug .. && cmake --build . --target LexerTest"
+        },
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        }
+      },
+      {
+        "label": "Build Parser Test (Debug)",
+        "type": "shell",
+        "linux": {
+          "command": "mkdir -p ${workspaceFolder}/build && cd ${workspaceFolder}/build && cmake -G Ninja -DENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug .. && cmake --build . --target ParserTest"
         },
         "group": {
           "kind": "build",

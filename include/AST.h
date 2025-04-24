@@ -553,54 +553,33 @@ private:
 
 class BinaryExprAST : public ExprAST {
 public:
-  enum BinaryOperation {
-    BinaryOp_Add,
-    BinaryOp_Sub,
-    BinaryOp_Mul,
-    BinaryOp_Div,
-    BinaryOp_Mod,
-    BinaryOp_And,
-    BinaryOp_Or,
-    BinaryOp_Eq,
-    BinaryOp_Neq,
-    BinaryOp_Lt,
-    BinaryOp_Lteq,
-    BinaryOp_Gt,
-    BinaryOp_Gteq,
-    BinaryOp_Is,
-  };
-
   BinaryExprAST(Location location, std::unique_ptr<ExprAST> lhs,
-                std::unique_ptr<ExprAST> rhs, BinaryOperation op)
+                std::unique_ptr<ExprAST> rhs, TokenKind op)
       : ExprAST(ExprAST::Expr_BinaryOp, std::move(location)),
         lhs(std::move(lhs)), rhs(std::move(rhs)), op(op) {}
 
   const ExprAST* getLhs() const { return lhs.get(); }
   const ExprAST* getRhs() const { return rhs.get(); }
-  BinaryOperation getOp() const { return op; }
+  TokenKind getOp() const { return op; }
 
 private:
   std::unique_ptr<ExprAST> lhs;
   std::unique_ptr<ExprAST> rhs;
-  BinaryOperation op;
+  TokenKind op;
 };
 
 class UnaryExprAST : public ExprAST {
-
 public:
-  enum UnaryOperation { UnaryOp_Neg, UnaryOp_Not };
-
-  UnaryExprAST(Location location, std::unique_ptr<ExprAST> expr,
-               UnaryOperation op)
+  UnaryExprAST(Location location, std::unique_ptr<ExprAST> expr, TokenKind op)
       : ExprAST(ExprAST::Expr_UnaryOp, std::move(location)),
         expr(std::move(expr)), op(op) {}
 
   const ExprAST* getExpr() const { return expr.get(); }
-  UnaryOperation getOp() const { return op; }
+  TokenKind getOp() const { return op; }
 
 private:
   std::unique_ptr<ExprAST> expr;
-  UnaryOperation op;
+  TokenKind op;
 };
 
 } // namespace chocopy
