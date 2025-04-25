@@ -472,7 +472,7 @@ return a or b == 1
   auto programAST = parser.parseProgram();
   ASSERT_NE(programAST, nullptr);
   const auto& simpleStmts = programAST->getStmts();
-  ASSERT_EQ(simpleStmts.size(), 3);
+  ASSERT_EQ(simpleStmts.size(), 2);
 
   auto simpleStmt1 = llvm::dyn_cast<SimpleStmtAST>(simpleStmts[0].get());
   ASSERT_NE(simpleStmt1, nullptr);
@@ -539,6 +539,90 @@ a == b and c or d
   EXPECT_EQ(binaryExpr3->getOp(), TokenKind::kEqual);
   auto lhsExpr = llvm::dyn_cast<IdExprAST>(binaryExpr3->getLhs());
   ASSERT_NE(lhsExpr, nullptr);
+}
+
+// Test call expression (function call or constructor call)
+TEST(ParserTest, TestCallExpression) {
+  std::string program = R"(
+foo(bar, True, [1,1])
+a.c.create(12, True)
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+
+  Parser parser(lexer);
+
+  auto programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+  const auto& simpleStmts = programAST->getStmts();
+  ASSERT_EQ(simpleStmts.size(), 2);
+
+  auto simpleStmt1 = llvm::dyn_cast<SimpleStmtAST>(simpleStmts[0].get());
+  ASSERT_NE(simpleStmt1, nullptr);
+  auto simpleStmt1Expr = llvm::dyn_cast<SimpleStmtExprAST>(simpleStmt1);
+  ASSERT_NE(simpleStmt1Expr, nullptr);
+  auto callExpr = llvm::dyn_cast<CallExprAST>(simpleStmt1Expr->getExpr());
+  ASSERT_NE(callExpr, nullptr);
+  EXPECT_EQ(callExpr->getArgs().size(), 3);
+  auto idExpr = llvm::dyn_cast<IdExprAST>(callExpr->getCallee());
+  ASSERT_NE(idExpr, nullptr);
+  EXPECT_EQ(idExpr->getId(), "foo");
+
+  auto simpleStmt2 = llvm::dyn_cast<SimpleStmtAST>(simpleStmts[1].get());
+  ASSERT_NE(simpleStmt2, nullptr);
+  auto simpleStmt2Expr = llvm::dyn_cast<SimpleStmtExprAST>(simpleStmt2);
+  ASSERT_NE(simpleStmt2Expr, nullptr);
+  auto binaryExpr = llvm::dyn_cast<BinaryExprAST>(simpleStmt2Expr->getExpr());
+  ASSERT_NE(binaryExpr, nullptr);
+  EXPECT_EQ(binaryExpr->getOp(), TokenKind::kAttrAccessOp);
+  auto callExpr2 = llvm::dyn_cast<CallExprAST>(binaryExpr->getRhs());
+  ASSERT_NE(callExpr2, nullptr);
+
+  auto binaryExpr2 = llvm::dyn_cast<BinaryExprAST>(binaryExpr->getLhs());
+  ASSERT_NE(binaryExpr2, nullptr);
+  EXPECT_EQ(binaryExpr2->getOp(), TokenKind::kAttrAccessOp);
+}
+
+// Test call expression inside a composed expression
+TEST(ParserTest, TestCallExpressionInComposedExpr) {
+  std::string program = R"(
+a + a[1].bar(x)
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+
+  Parser parser(lexer);
+
+  auto programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+  const auto& simpleStmts = programAST->getStmts();
+  ASSERT_EQ(simpleStmts.size(), 1);
+
+  auto simpleStmt1 = llvm::dyn_cast<SimpleStmtAST>(simpleStmts[0].get());
+  ASSERT_NE(simpleStmt1, nullptr);
+  auto simpleStmt1Expr = llvm::dyn_cast<SimpleStmtExprAST>(simpleStmt1);
+  ASSERT_NE(simpleStmt1Expr, nullptr);
+  auto binaryExpr1 = llvm::dyn_cast<BinaryExprAST>(simpleStmt1Expr->getExpr());
+  ASSERT_NE(binaryExpr1, nullptr);
+  EXPECT_EQ(binaryExpr1->getOp(), TokenKind::kPlus);
+  auto lhsExpr = llvm::dyn_cast<IdExprAST>(binaryExpr1->getLhs());
+  ASSERT_NE(lhsExpr, nullptr);
+  EXPECT_EQ(lhsExpr->getId(), "a");
+  auto rhsExpr = llvm::dyn_cast<BinaryExprAST>(binaryExpr1->getRhs());
+  ASSERT_NE(rhsExpr, nullptr);
+  EXPECT_EQ(rhsExpr->getOp(), TokenKind::kAttrAccessOp);
+  auto rhsLhsExpr = llvm::dyn_cast<BinaryExprAST>(rhsExpr->getLhs());
+  ASSERT_NE(rhsLhsExpr, nullptr);
+  EXPECT_EQ(rhsLhsExpr->getOp(), TokenKind::kIndexAccessOp);
+
+  auto rhsRhsExpr = llvm::dyn_cast<CallExprAST>(rhsExpr->getRhs());
+  ASSERT_NE(rhsRhsExpr, nullptr);
+  auto rhsRhsCallee = llvm::dyn_cast<IdExprAST>(rhsRhsExpr->getCallee());
+  ASSERT_NE(rhsRhsCallee, nullptr);
+  EXPECT_EQ(rhsRhsCallee->getId(), "bar");
+  EXPECT_EQ(rhsRhsExpr->getArgs().size(), 1);
 }
 
 } // namespace chocopy

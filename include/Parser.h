@@ -90,8 +90,8 @@ private:
       std::unique_ptr<ExprAST> expr = parseExpr();
       if (lexer.getCurToken() == TokenKind::kNewLine) {
         lexer.consume(TokenKind::kNewLine);
-        return std::make_unique<SimpleStmtExprAST>(Location{std::make_shared<std::string>(""), 0, 0},
-                                                   std::move(expr));
+        return std::make_unique<SimpleStmtExprAST>(
+            Location{std::make_shared<std::string>(""), 0, 0}, std::move(expr));
       }
       std::vector<std::unique_ptr<ExprAST>> targets;
       targets.push_back(std::move(expr));
@@ -146,8 +146,7 @@ private:
         lexer.getCurToken() == TokenKind::kLessThanOrEqual ||
         lexer.getCurToken() == TokenKind::kGreaterThanOrEqual ||
         lexer.getCurToken() == TokenKind::kAttrAccessOp ||
-        lexer.getCurToken() == TokenKind::kOpenSquareBracket
-        ) {
+        lexer.getCurToken() == TokenKind::kOpenSquareBracket) {
       return parseBinaryOpRHS(0, std::move(lhs));
     }
 

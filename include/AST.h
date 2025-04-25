@@ -386,7 +386,6 @@ public:
     Expr_Print,
     Expr_Input,
     Expr_Len,
-    Expr_MemberInvoke,
     Expr_BinaryOp,
     Expr_UnaryOp,
     Expr_IfElse,
@@ -515,29 +514,6 @@ public:
   static bool classof(const ExprAST* c) {
     return c->getKind() == ExprAST::Expr_Len;
   }
-};
-
-class MemberInvokeExprAST : public ExprAST {
-public:
-  MemberInvokeExprAST(Location location, std::unique_ptr<ExprAST> lhs,
-                      std::string id,
-                      std::vector<std::unique_ptr<ExprAST>> args)
-      : ExprAST(ExprAST::Expr_MemberInvoke, std::move(location)),
-        lhs(std::move(lhs)), id(std::move(id)), args(std::move(args)) {}
-
-  const ExprAST* getLhs() const { return lhs.get(); }
-  const llvm::StringRef getId() const { return id; }
-  const std::vector<std::unique_ptr<ExprAST>>& getArgs() const { return args; }
-
-  // LLVM style RTTI
-  static bool classof(const ExprAST* c) {
-    return c->getKind() == ExprAST::Expr_MemberInvoke;
-  }
-
-private:
-  std::unique_ptr<ExprAST> lhs;
-  const std::string id;
-  std::vector<std::unique_ptr<ExprAST>> args;
 };
 
 class IfElseExprAST : public ExprAST {
