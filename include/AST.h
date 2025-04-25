@@ -380,8 +380,6 @@ class ExprAST {
 public:
   enum ExprASTKind {
     Expr_Id,
-    Expr_Mmember,
-    Expr_Index,
     Expr_Literal,
     Expr_ListLiteral,
     Expr_Call,
@@ -414,38 +412,13 @@ public:
 
   const llvm::StringRef getId() const { return id; }
 
+  /// LLVM style RTTI
+  static bool classof(const ExprAST* c) {
+    return c->getKind() == ExprAST::Expr_Id;
+  }
+
 private:
   const std::string id;
-};
-
-class MmemberExprAST : public ExprAST {
-public:
-  MmemberExprAST(Location location, std::unique_ptr<ExprAST> lhs,
-                 std::string id)
-      : ExprAST(ExprAST::Expr_Mmember, std::move(location)),
-        lhs(std::move(lhs)), id(std::move(id)) {}
-
-  const ExprAST* getLhs() const { return lhs.get(); }
-  const llvm::StringRef getId() const { return id; }
-
-private:
-  std::unique_ptr<ExprAST> lhs;
-  const std::string id;
-};
-
-class IndexExprAST : public ExprAST {
-public:
-  IndexExprAST(Location location, std::unique_ptr<ExprAST> lhs,
-               std::unique_ptr<ExprAST> index)
-      : ExprAST(ExprAST::Expr_Index, std::move(location)), lhs(std::move(lhs)),
-        index(std::move(index)) {}
-
-  const ExprAST* getLhs() const { return lhs.get(); }
-  const ExprAST* getIndex() const { return index.get(); }
-
-private:
-  std::unique_ptr<ExprAST> lhs;
-  std::unique_ptr<ExprAST> index;
 };
 
 class LiteralExprAST : public ExprAST {
@@ -455,6 +428,11 @@ public:
         literal(std::move(literal)) {}
 
   const LiteralAST* getLiteral() const { return literal.get(); }
+
+  /// LLVM style RTTI
+  static bool classof(const ExprAST* c) {
+    return c->getKind() == ExprAST::Expr_Literal;
+  }
 
 private:
   std::unique_ptr<LiteralAST> literal;
@@ -471,6 +449,11 @@ public:
     return elements;
   }
 
+  // LLVM style RTTI
+  static bool classof(const ExprAST* c) {
+    return c->getKind() == ExprAST::Expr_ListLiteral;
+  }
+
 private:
   std::vector<std::unique_ptr<ExprAST>> elements;
 };
@@ -485,6 +468,11 @@ public:
   const ExprAST* getCallee() const { return callee.get(); }
   const std::vector<std::unique_ptr<ExprAST>>& getArgs() const { return args; }
 
+  // LLVM style RTTI
+  static bool classof(const ExprAST* c) {
+    return c->getKind() == ExprAST::Expr_Call;
+  }
+
 private:
   std::unique_ptr<ExprAST> callee;
   std::vector<std::unique_ptr<ExprAST>> args;
@@ -498,6 +486,11 @@ public:
 
   const std::unique_ptr<ExprAST>& getArgs() const { return printArg; }
 
+  // LLVM style RTTI
+  static bool classof(const ExprAST* c) {
+    return c->getKind() == ExprAST::Expr_Print;
+  }
+
 private:
   std::unique_ptr<ExprAST> printArg;
 };
@@ -506,12 +499,22 @@ class InputExprAST : public ExprAST {
 public:
   InputExprAST(Location location, std::string id)
       : ExprAST(ExprAST::Expr_Input, std::move(location)) {}
+
+  // LLVM style RTTI
+  static bool classof(const ExprAST* c) {
+    return c->getKind() == ExprAST::Expr_Input;
+  }
 };
 
 class LenExprAST : public ExprAST {
 public:
   LenExprAST(Location location, std::unique_ptr<ExprAST> expr)
       : ExprAST(ExprAST::Expr_Len, std::move(location)) {}
+
+  // LLVM style RTTI
+  static bool classof(const ExprAST* c) {
+    return c->getKind() == ExprAST::Expr_Len;
+  }
 };
 
 class MemberInvokeExprAST : public ExprAST {
@@ -525,6 +528,11 @@ public:
   const ExprAST* getLhs() const { return lhs.get(); }
   const llvm::StringRef getId() const { return id; }
   const std::vector<std::unique_ptr<ExprAST>>& getArgs() const { return args; }
+
+  // LLVM style RTTI
+  static bool classof(const ExprAST* c) {
+    return c->getKind() == ExprAST::Expr_MemberInvoke;
+  }
 
 private:
   std::unique_ptr<ExprAST> lhs;
@@ -545,6 +553,11 @@ public:
   const ExprAST* getIfBody() const { return ifBody.get(); }
   const ExprAST* getElseBody() const { return elseBody.get(); }
 
+  // LLVM style RTTI
+  static bool classof(const ExprAST* c) {
+    return c->getKind() == ExprAST::Expr_IfElse;
+  }
+
 private:
   std::unique_ptr<ExprAST> condition;
   std::unique_ptr<ExprAST> ifBody;
@@ -562,6 +575,11 @@ public:
   const ExprAST* getRhs() const { return rhs.get(); }
   TokenKind getOp() const { return op; }
 
+  // LLVM style RTTI
+  static bool classof(const ExprAST* c) {
+    return c->getKind() == ExprAST::Expr_BinaryOp;
+  }
+
 private:
   std::unique_ptr<ExprAST> lhs;
   std::unique_ptr<ExprAST> rhs;
@@ -576,6 +594,11 @@ public:
 
   const ExprAST* getExpr() const { return expr.get(); }
   TokenKind getOp() const { return op; }
+
+  // LLVM style RTTI
+  static bool classof(const ExprAST* c) {
+    return c->getKind() == ExprAST::Expr_UnaryOp;
+  }
 
 private:
   std::unique_ptr<ExprAST> expr;

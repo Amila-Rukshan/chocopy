@@ -39,8 +39,7 @@ public:
           break;
         }
         break;
-      case TokenKind::k_pass:
-      case TokenKind::k_return:
+      default:
         stmts.push_back(parseSimpleStmt());
         break;
       case TokenKind::k_for:
@@ -53,7 +52,6 @@ public:
         // parse function definition
       case TokenKind::k_class:
         // parse class definition
-      default:
         lexer.getNextToken();
         break;
       case TokenKind::kEOF:
@@ -73,18 +71,26 @@ private:
       lexer.getNextToken();
       lexer.consume(TokenKind::kNewLine);
       return std::make_unique<SimpleStmtPassAST>(lexer.getLastLocation());
-    case TokenKind::k_return:
+    case TokenKind::k_return: {
       if (lexer.peekNextToken() == TokenKind::kNewLine) {
         lexer.getNextToken();
         lexer.consume(TokenKind::kNewLine);
         return std::make_unique<SimpleStmtReturnAST>(lexer.getLastLocation(),
                                                      nullptr);
       }
+      Location location = lexer.getLastLocation();
+      std::unique_ptr<ExprAST> retExpr = nullptr;
+      lexer.getNextToken();
+      retExpr = parseExpr();
+      lexer.consume(TokenKind::kNewLine);
+      return std::make_unique<SimpleStmtReturnAST>(location,
+                                                   std::move(retExpr));
+    }
     default:
       std::unique_ptr<ExprAST> expr = parseExpr();
       if (lexer.getCurToken() == TokenKind::kNewLine) {
         lexer.consume(TokenKind::kNewLine);
-        return std::make_unique<SimpleStmtExprAST>(Location{0, 0},
+        return std::make_unique<SimpleStmtExprAST>(Location{std::make_shared<std::string>(""), 0, 0},
                                                    std::move(expr));
       }
       std::vector<std::unique_ptr<ExprAST>> targets;
@@ -111,7 +117,7 @@ private:
   }
 
   std::unique_ptr<ExprAST> parseExpr() {
-    if (lexer.peekNextToken() == TokenKind::k_not) {
+    if (lexer.getCurToken() == TokenKind::k_not) {
       lexer.getNextToken();
       Location notLocation = lexer.getLastLocation();
       auto expr = parseExpr();
@@ -138,8 +144,11 @@ private:
         lexer.getCurToken() == TokenKind::kLessThan ||
         lexer.getCurToken() == TokenKind::kGreaterThan ||
         lexer.getCurToken() == TokenKind::kLessThanOrEqual ||
-        lexer.getCurToken() == TokenKind::kGreaterThanOrEqual) {
-      return std::move(parseBinaryOpRHS(0, std::move(lhs)));
+        lexer.getCurToken() == TokenKind::kGreaterThanOrEqual ||
+        lexer.getCurToken() == TokenKind::kAttrAccessOp ||
+        lexer.getCurToken() == TokenKind::kOpenSquareBracket
+        ) {
+      return parseBinaryOpRHS(0, std::move(lhs));
     }
 
     while (lexer.getCurToken() == TokenKind::k_and ||
@@ -178,6 +187,16 @@ private:
     std::string id;
     Location idLocation;
     switch (lexer.getCurToken()) {
+    case TokenKind::kMinus: {
+      TokenKind op = lexer.getCurToken();
+      Location opLocation = lexer.getLastLocation();
+      lexer.getNextToken();
+      auto rhs = parseCExpr();
+      if (!rhs) {
+        return parseError<ExprAST>("expression", "after unary operator");
+      }
+      return std::make_unique<UnaryExprAST>(opLocation, std::move(rhs), op);
+    }
     case TokenKind::kIdentifier:
       id = lexer.getIdentifier();
       idLocation = lexer.getLastLocation();
@@ -205,29 +224,6 @@ private:
             std::move(args));
       }
 
-      // Handle member access
-      if (lexer.getCurToken() == TokenKind::kAttrAccessOp) {
-        lexer.getNextToken();
-        std::string member = lexer.getIdentifier();
-        lexer.getNextToken();
-        return std::make_unique<MmemberExprAST>(
-            lexer.getLastLocation(),
-            std::make_unique<IdExprAST>(lexer.getLastLocation(), id), member);
-      }
-
-      // Handle index access
-      if (lexer.getCurToken() == TokenKind::kOpenSquareBracket) {
-        lexer.getNextToken();
-        auto index = parseExpr();
-        if (!index) {
-          return parseError<ExprAST>("expression", "in index access");
-        }
-        lexer.consume(TokenKind::kCloseSquareBracket);
-        return std::make_unique<IndexExprAST>(
-            lexer.getLastLocation(),
-            std::make_unique<IdExprAST>(idLocation, id), std::move(index));
-      }
-
       // Simple identifier
       return std::make_unique<IdExprAST>(lexer.getLastLocation(), id);
     case TokenKind::kIntegerLiteral:
@@ -236,7 +232,7 @@ private:
     case TokenKind::k_False:
     case TokenKind::k_None:
       return std::make_unique<LiteralExprAST>(lexer.getLastLocation(),
-                                              std::move(parseLiteral()));
+                                              parseLiteral());
     case TokenKind::kOpenParantheses: {
       lexer.getNextToken();
       auto expr = parseExpr();
@@ -284,6 +280,13 @@ private:
       lexer.getNextToken();
 
       auto rhs = parseCExpr();
+
+      // consume close square bracket if op is open square bracket
+      if (op == TokenKind::kOpenSquareBracket) {
+        lexer.consume(TokenKind::kCloseSquareBracket);
+        op = TokenKind::kIndexAccessOp;
+      }
+
       if (!rhs) {
         return nullptr;
       }
@@ -419,6 +422,9 @@ private:
     case TokenKind::kIntDiv:
     case TokenKind::kMod:
       return 7;
+    case TokenKind::kAttrAccessOp:
+    case TokenKind::kOpenSquareBracket:
+      return 9;
     default:
       return -1;
     }

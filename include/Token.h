@@ -77,6 +77,8 @@ enum TokenKind {
 
   kUnknown,       // unknown token
   kInvalidIndent, // invalid indent token
+
+  kIndexAccessOp, // []
 };
 
 std::string tokenKindToString(TokenKind kind) {
