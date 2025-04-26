@@ -625,4 +625,122 @@ a + a[1].bar(x)
   EXPECT_EQ(rhsRhsExpr->getArgs().size(), 1);
 }
 
+TEST(ParserTest, TestIfStatement) {
+  std::string program = R"(
+if a + b == 0:
+    print("a")
+elif a + b == 1:
+    print("b")
+    return x
+elif a + b == 2:
+    print("c")
+    v = u  + a * t
+else:
+    print("d")
+    return y
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  Parser parser(lexer);
+
+  auto programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+  const auto& simpleStmts = programAST->getStmts();
+  ASSERT_EQ(simpleStmts.size(), 1);
+  auto simpleStmt1 = llvm::dyn_cast<StmtIfAST>(simpleStmts[0].get());
+  ASSERT_NE(simpleStmt1, nullptr);
+  EXPECT_EQ(simpleStmt1->getElifs().size(), 2);
+  EXPECT_EQ(simpleStmt1->getElseBody().size(), 2);
+  EXPECT_EQ(simpleStmt1->getBody().size(), 1);
+  EXPECT_EQ(simpleStmt1->getElifs()[0]->getBody().size(), 2);
+  EXPECT_EQ(simpleStmt1->getElifs()[1]->getBody().size(), 2);
+}
+
+TEST(ParserTest, TestWhileStatement) {
+  std::string program = R"(
+while v == 0:
+    print(v)
+    v = u - a * t
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  Parser parser(lexer);
+
+  auto programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+  const auto& simpleStmts = programAST->getStmts();
+  ASSERT_EQ(simpleStmts.size(), 1);
+  auto simpleStmt1 = llvm::dyn_cast<StmtWhileAST>(simpleStmts[0].get());
+  ASSERT_NE(simpleStmt1, nullptr);
+  EXPECT_EQ(simpleStmt1->getBody().size(), 2);
+}
+
+TEST(ParserTest, TestForStatement) {
+  std::string program = R"(
+for ball in [1, 3, 5]:
+    print(ball)
+for cStr in "string literal":
+    print(cStr + "!\n")
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  Parser parser(lexer);
+
+  auto programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+  const auto& simpleStmts = programAST->getStmts();
+  ASSERT_EQ(simpleStmts.size(), 2);
+  auto simpleStmt1 = llvm::dyn_cast<StmtForAST>(simpleStmts[0].get());
+  ASSERT_NE(simpleStmt1, nullptr);
+  EXPECT_EQ(simpleStmt1->getBody().size(), 1);
+  auto simpleStmt2 = llvm::dyn_cast<StmtForAST>(simpleStmts[1].get());
+  ASSERT_NE(simpleStmt2, nullptr);
+  EXPECT_EQ(simpleStmt2->getBody().size(), 1);
+}
+
+TEST(ParserTest, TestNestedControlFlows) {
+  std::string program = R"(
+while x > 0:
+    x = x -1
+    print(x)
+    while x > 3:
+        if list[x] % 2 == 0:
+            print("hooray")
+        else:
+            print("missed")
+    for c in "chocopy":
+        print(c)
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  Parser parser(lexer);
+
+  auto programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+  const auto& simpleStmts = programAST->getStmts();
+  ASSERT_EQ(simpleStmts.size(), 1);
+  auto simpleStmt1 = llvm::dyn_cast<StmtWhileAST>(simpleStmts[0].get());
+  ASSERT_NE(simpleStmt1, nullptr);
+  EXPECT_EQ(simpleStmt1->getBody().size(), 4);
+
+  auto simpleStmt2 =
+      llvm::dyn_cast<StmtWhileAST>(simpleStmt1->getBody()[2].get());
+  ASSERT_NE(simpleStmt2, nullptr);
+  EXPECT_EQ(simpleStmt2->getBody().size(), 1);
+  auto innerIfStmt = llvm::dyn_cast<StmtIfAST>(simpleStmt2->getBody()[0].get());
+  ASSERT_NE(innerIfStmt, nullptr);
+  EXPECT_EQ(innerIfStmt->getBody().size(), 1);
+  EXPECT_EQ(innerIfStmt->getElifs().size(), 0);
+  EXPECT_EQ(innerIfStmt->getElseBody().size(), 1);
+
+  auto simpleStmt3 =
+      llvm::dyn_cast<StmtForAST>(simpleStmt1->getBody()[3].get());
+  ASSERT_NE(simpleStmt3, nullptr);
+  EXPECT_EQ(simpleStmt3->getBody().size(), 1);
+}
+
 } // namespace chocopy
