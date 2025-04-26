@@ -35,19 +35,18 @@ public:
           varDefs.push_back(parseVarDef());
         } else {
           // parse simple statements that start with an identifier
-          stmts.push_back(parseSimpleStmt());
+          stmts.push_back(parseStmt());
           break;
         }
         break;
       default:
-        stmts.push_back(parseSimpleStmt());
+        stmts.push_back(parseStmt());
         break;
-      case TokenKind::k_for:
-        // parse for loop
       case TokenKind::k_while:
-        // parse while loop
+      case TokenKind::k_for:
       case TokenKind::k_if:
-        // parse if statement
+        stmts.push_back(parseStmt());
+        break;
       case TokenKind::k_def:
         // parse function definition
       case TokenKind::k_class:
@@ -65,6 +64,105 @@ public:
 private:
   Lexer& lexer;
 
+  std::unique_ptr<StmtAST> parseStmt() {
+    switch (lexer.getCurToken()) {
+    case TokenKind::k_while:
+      return parseWhileStmt();
+      break;
+    case TokenKind::k_for:
+      return parseForStmt();
+      break;
+    case TokenKind::k_if:
+      return parseIfStmt();
+      break;
+    default:
+      return parseSimpleStmt();
+    }
+    return nullptr;
+  }
+
+  std::vector<std::unique_ptr<StmtAST>> parseBlock() {
+    std::vector<std::unique_ptr<StmtAST>> stmts;
+    lexer.consume(TokenKind::kNewLine);
+    lexer.consume(TokenKind::kIndent);
+    while (lexer.getCurToken() != TokenKind::kDedent) {
+      auto stmt = parseStmt();
+      stmts.push_back(std::move(stmt));
+    }
+    lexer.consume(TokenKind::kDedent);
+    return stmts;
+  }
+
+  std::unique_ptr<StmtWhileAST> parseWhileStmt() {
+    lexer.consume(TokenKind::k_while);
+    std::unique_ptr<ExprAST> condition = parseExpr();
+    if (!condition) {
+      return parseError<StmtWhileAST>("expression", "after 'while'");
+    }
+    lexer.consume(TokenKind::kColon);
+    std::vector<std::unique_ptr<StmtAST>> body = parseBlock();
+    return std::make_unique<StmtWhileAST>(
+        lexer.getLastLocation(), std::move(condition), std::move(body));
+  }
+
+  std::unique_ptr<StmtForAST> parseForStmt() {
+    lexer.consume(TokenKind::k_for);
+    std::string id = lexer.getIdentifier();
+    Location idLocation = lexer.getLastLocation();
+    lexer.getNextToken();
+    lexer.consume(TokenKind::k_in);
+    std::unique_ptr<ExprAST> expr = parseExpr();
+    if (!expr) {
+      return parseError<StmtForAST>("expression", "after 'for'");
+    }
+    lexer.consume(TokenKind::kColon);
+    std::vector<std::unique_ptr<StmtAST>> body = parseBlock();
+    return std::make_unique<StmtForAST>(
+        lexer.getLastLocation(), std::move(expr),
+        std::make_unique<TypedVarAST>(id, idLocation, nullptr),
+        std::move(body));
+  }
+
+  std::unique_ptr<StmtIfAST> parseIfStmt() {
+    lexer.consume(TokenKind::k_if);
+    std::unique_ptr<ExprAST> condition = parseExpr();
+    if (!condition) {
+      return parseError<StmtIfAST>("expression", "after 'if'");
+    }
+    lexer.consume(TokenKind::kColon);
+    std::vector<std::unique_ptr<StmtAST>> body = parseBlock();
+
+    // check for elif(s)
+    std::vector<std::unique_ptr<StmtIfAST>> elifs;
+    if (lexer.getCurToken() == TokenKind::k_elif) {
+      while (lexer.getCurToken() == TokenKind::k_elif) {
+        lexer.consume(TokenKind::k_elif);
+        std::unique_ptr<ExprAST> elifCondition = parseExpr();
+        if (!elifCondition) {
+          return parseError<StmtIfAST>("expression", "after 'elif'");
+        }
+        lexer.consume(TokenKind::kColon);
+        std::vector<std::unique_ptr<StmtAST>> elifBody = parseBlock();
+        elifs.push_back(std::make_unique<StmtIfAST>(
+            lexer.getLastLocation(), std::move(elifCondition),
+            std::move(elifBody), std::vector<std::unique_ptr<StmtIfAST>>{},
+            std::vector<std::unique_ptr<StmtAST>>{}));
+      }
+    }
+
+    // check for else
+    std::vector<std::unique_ptr<StmtAST>> elseBody;
+    if (lexer.getCurToken() == TokenKind::k_else) {
+      lexer.getNextToken();
+      lexer.consume(TokenKind::kColon);
+      elseBody = parseBlock();
+    }
+
+    return std::make_unique<StmtIfAST>(lexer.getLastLocation(),
+                                       std::move(condition), std::move(body),
+                                       std::move(elifs), std::move(elseBody));
+  }
+
   std::unique_ptr<SimpleStmtAST> parseSimpleStmt() {
     switch (lexer.getCurToken()) {
     case TokenKind::k_pass:
@@ -72,15 +170,14 @@ private:
       lexer.consume(TokenKind::kNewLine);
       return std::make_unique<SimpleStmtPassAST>(lexer.getLastLocation());
     case TokenKind::k_return: {
-      if (lexer.peekNextToken() == TokenKind::kNewLine) {
-        lexer.getNextToken();
+      lexer.consume(TokenKind::k_return);
+      if (lexer.getCurToken() == TokenKind::kNewLine) {
         lexer.consume(TokenKind::kNewLine);
         return std::make_unique<SimpleStmtReturnAST>(lexer.getLastLocation(),
                                                      nullptr);
       }
       Location location = lexer.getLastLocation();
       std::unique_ptr<ExprAST> retExpr = nullptr;
-      lexer.getNextToken();
       retExpr = parseExpr();
       lexer.consume(TokenKind::kNewLine);
       return std::make_unique<SimpleStmtReturnAST>(location,
@@ -308,7 +405,7 @@ private:
     std::string id = lexer.getIdentifier();
     Location idLocation = lexer.getLastLocation();
 
-    lexer.getNextToken();
+    lexer.consume(TokenKind::kColon);
     std::unique_ptr<TypeAST> type = parseType();
     if (!type) {
       return parseError<VarDefAST>("type", "after identifier");

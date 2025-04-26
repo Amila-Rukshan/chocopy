@@ -279,6 +279,78 @@ private:
   Location location;
 };
 
+class StmtIfAST : public StmtAST {
+public:
+  StmtIfAST(Location location, std::unique_ptr<ExprAST> condition,
+            std::vector<std::unique_ptr<StmtAST>> body,
+            std::vector<std::unique_ptr<StmtIfAST>> elifs,
+            std::vector<std::unique_ptr<StmtAST>> elseBody)
+      : StmtAST(StmtASTKind::Stmt_If, std::move(location)),
+        condition(std::move(condition)), body(std::move(body)),
+        elifs(std::move(elifs)), elseBody(std::move(elseBody)) {}
+
+  const ExprAST* getCondition() const { return condition.get(); }
+  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
+  const std::vector<std::unique_ptr<StmtIfAST>>& getElifs() const {
+    return elifs;
+  }
+  const std::vector<std::unique_ptr<StmtAST>>& getElseBody() const {
+    return elseBody;
+  }
+
+  /// LLVM style RTTI
+  static bool classof(const StmtAST* c) {
+    return c->getKind() == StmtASTKind::Stmt_If;
+  }
+
+private:
+  std::unique_ptr<ExprAST> condition;
+  std::vector<std::unique_ptr<StmtAST>> body;
+  std::vector<std::unique_ptr<StmtIfAST>> elifs;
+  std::vector<std::unique_ptr<StmtAST>> elseBody;
+};
+
+class StmtWhileAST : public StmtAST {
+public:
+  StmtWhileAST(Location location, std::unique_ptr<ExprAST> condition,
+               std::vector<std::unique_ptr<StmtAST>> body)
+      : StmtAST(StmtASTKind::Stmt_While, std::move(location)),
+        condition(std::move(condition)), body(std::move(body)) {}
+
+  const ExprAST* getCondition() const { return condition.get(); }
+  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
+
+  /// LLVM style RTTI
+  static bool classof(const StmtAST* c) {
+    return c->getKind() == StmtASTKind::Stmt_While;
+  }
+
+private:
+  std::unique_ptr<ExprAST> condition;
+  std::vector<std::unique_ptr<StmtAST>> body;
+};
+
+class StmtForAST : public StmtAST {
+public:
+  StmtForAST(Location location, std::unique_ptr<ExprAST> expr,
+             std::unique_ptr<TypedVarAST> typedVar,
+             std::vector<std::unique_ptr<StmtAST>> body)
+      : StmtAST(StmtASTKind::Stmt_For, std::move(location)),
+        expr(std::move(expr)), body(std::move(body)) {}
+
+  const ExprAST* getExpr() const { return expr.get(); }
+  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
+
+  /// LLVM style RTTI
+  static bool classof(const StmtAST* c) {
+    return c->getKind() == StmtASTKind::Stmt_For;
+  }
+
+private:
+  std::unique_ptr<ExprAST> expr;
+  std::vector<std::unique_ptr<StmtAST>> body;
+};
+
 class SimpleStmtAST : public StmtAST {
 public:
   enum SimpleStmtASTKind {
