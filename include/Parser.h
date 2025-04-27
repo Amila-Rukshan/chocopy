@@ -26,6 +26,7 @@ public:
 
     std::vector<std::unique_ptr<VarDefAST>> varDefs;
     std::vector<std::unique_ptr<StmtAST>> stmts;
+    std::vector<std::unique_ptr<FunctionAST>> funcDefs;
     while (true) {
       Location location = lexer.getLastLocation();
       std::string id = lexer.getIdentifier();
@@ -48,14 +49,15 @@ public:
         stmts.push_back(parseStmt());
         break;
       case TokenKind::k_def:
-        // parse function definition
+        funcDefs.push_back(parseFunction());
+        break;
       case TokenKind::k_class:
         // parse class definition
         lexer.getNextToken();
         break;
       case TokenKind::kEOF:
-        return std::make_unique<ProgramAST>(std::move(varDefs),
-                                            std::move(stmts));
+        return std::make_unique<ProgramAST>(
+            std::move(varDefs), std::move(funcDefs), std::move(stmts));
       }
     }
     return nullptr;
@@ -63,6 +65,102 @@ public:
 
 private:
   Lexer& lexer;
+
+  std::unique_ptr<FunctionAST> parseFunction() {
+    lexer.consume(TokenKind::k_def);
+    std::string id = lexer.getIdentifier();
+    Location idLocation = lexer.getLastLocation();
+    lexer.getNextToken();
+
+    lexer.consume(TokenKind::kOpenParantheses);
+    std::vector<std::unique_ptr<TypedVarAST>> args;
+    while (lexer.getCurToken() != TokenKind::kCloseParantheses) {
+      std::string argId = lexer.getIdentifier();
+      Location argLocation = lexer.getLastLocation();
+
+      lexer.getNextToken();
+      lexer.consume(TokenKind::kColon);
+      std::unique_ptr<TypeAST> argType = parseType();
+      lexer.getNextToken();
+      args.push_back(std::make_unique<TypedVarAST>(argId, argLocation,
+                                                   std::move(argType)));
+      if (lexer.getCurToken() == TokenKind::kComma) {
+        lexer.consume(TokenKind::kComma);
+      }
+    }
+    lexer.consume(TokenKind::kCloseParantheses);
+
+    std::unique_ptr<TypeAST> returnType = nullptr;
+    if (lexer.getCurToken() == TokenKind::kColon) {
+      lexer.consume(TokenKind::kColon);
+    }
+
+    if (lexer.getCurToken() == TokenKind::kArrow) {
+      lexer.consume(TokenKind::kArrow);
+      returnType = parseType();
+      lexer.getNextToken();
+      lexer.consume(TokenKind::kColon);
+    }
+
+    lexer.consume(TokenKind::kNewLine);
+    lexer.consume(TokenKind::kIndent);
+
+    std::vector<std::unique_ptr<VarDefAST>> varDefs;
+    std::vector<std::string> globalDecls;
+    std::vector<std::string> nonlocalDecls;
+    std::vector<std::unique_ptr<FunctionAST>> funcDefs;
+    std::vector<std::unique_ptr<StmtAST>> body;
+
+    bool dclnsDone = false;
+
+    while (lexer.getCurToken() != TokenKind::kDedent && !dclnsDone) {
+      switch (lexer.getCurToken()) {
+      case TokenKind::k_global: {
+        lexer.consume(TokenKind::k_global);
+        globalDecls.push_back(lexer.getIdentifier());
+        lexer.getNextToken();
+        lexer.consume(TokenKind::kNewLine);
+        break;
+      }
+      case TokenKind::k_nonlocal: {
+        lexer.consume(TokenKind::k_nonlocal);
+        nonlocalDecls.push_back(lexer.getIdentifier());
+        lexer.getNextToken();
+        lexer.consume(TokenKind::kNewLine);
+        break;
+      }
+      case TokenKind::kIdentifier: {
+        if (lexer.peekNextToken() == TokenKind::kColon) {
+          varDefs.push_back(parseVarDef());
+        } else {
+          dclnsDone = true;
+        }
+        break;
+      }
+      case TokenKind::k_def: {
+        funcDefs.push_back(parseFunction());
+        break;
+      }
+      default:
+        dclnsDone = true;
+        break;
+      }
+    }
+
+    body.push_back(parseStmt());
+    while (lexer.getCurToken() != TokenKind::kDedent) {
+      auto stmt = parseStmt();
+      if (stmt) {
+        body.push_back(std::move(stmt));
+      }
+    }
+
+    lexer.consume(TokenKind::kDedent);
+    return std::make_unique<FunctionAST>(
+        idLocation, id, std::move(args), std::move(returnType),
+        std::move(varDefs), std::move(globalDecls), std::move(nonlocalDecls),
+        std::move(funcDefs), std::move(body));
+  }
 
   std::unique_ptr<StmtAST> parseStmt() {
     switch (lexer.getCurToken()) {

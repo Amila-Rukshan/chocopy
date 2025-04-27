@@ -14,6 +14,9 @@ namespace chocopy {
 class VarDefAST;
 class StmtAST;
 class ExprAST;
+class TypeAST;
+class TypedVarAST;
+class FunctionAST;
 
 /***********************************/
 /* Program                         */
@@ -22,20 +25,74 @@ class ExprAST;
 class ProgramAST {
 public:
   ProgramAST(std::vector<std::unique_ptr<VarDefAST>> varDefs,
+             std::vector<std::unique_ptr<FunctionAST>> funcDefs,
              std::vector<std::unique_ptr<StmtAST>> stmts)
-      : varDefs(std::move(varDefs)), stmts(std::move(stmts)) {}
+      : varDefs(std::move(varDefs)), funcDefs(std::move(funcDefs)),
+        stmts(std::move(stmts)) {}
 
   const std::vector<std::unique_ptr<VarDefAST>>& getVarDefs() const {
     return varDefs;
   }
-
+  const std::vector<std::unique_ptr<FunctionAST>>& getFuncDefs() const {
+    return funcDefs;
+  }
   const std::vector<std::unique_ptr<StmtAST>>& getStmts() const {
     return stmts;
   }
 
 private:
   std::vector<std::unique_ptr<VarDefAST>> varDefs;
+  std::vector<std::unique_ptr<FunctionAST>> funcDefs;
   std::vector<std::unique_ptr<StmtAST>> stmts;
+};
+
+/***********************************/
+/* Function                        */
+/***********************************/
+
+class FunctionAST {
+public:
+  FunctionAST(Location location, std::string id,
+              std::vector<std::unique_ptr<TypedVarAST>> args,
+              std::unique_ptr<TypeAST> returnType,
+              std::vector<std::unique_ptr<VarDefAST>> varDefs,
+              std::vector<std::string> globalDecls,
+              std::vector<std::string> nonlocalDecls,
+              std::vector<std::unique_ptr<FunctionAST>> funcDefs,
+              std::vector<std::unique_ptr<StmtAST>> body)
+      : location(location), id(std::move(id)), args(std::move(args)),
+        returnType(std::move(returnType)), varDefs(std::move(varDefs)),
+        globalDecls(std::move(globalDecls)),
+        nonlocalDecls(std::move(nonlocalDecls)), funcDefs(std::move(funcDefs)),
+        body(std::move(body)) {}
+
+  const llvm::StringRef getId() const { return id; }
+  const std::vector<std::unique_ptr<TypedVarAST>>& getArgs() const {
+    return args;
+  }
+  const TypeAST* getReturnType() const { return returnType.get(); }
+  const std::vector<std::unique_ptr<VarDefAST>>& getVarDefs() const {
+    return varDefs;
+  }
+  const std::vector<std::string>& getGlobalDecls() const { return globalDecls; }
+  const std::vector<std::string>& getNonlocalDecls() const {
+    return nonlocalDecls;
+  }
+  const std::vector<std::unique_ptr<FunctionAST>>& getFuncDefs() const {
+    return funcDefs;
+  }
+  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
+
+private:
+  Location location;
+  const std::string id;
+  std::vector<std::unique_ptr<TypedVarAST>> args;
+  std::unique_ptr<TypeAST> returnType;
+  std::vector<std::unique_ptr<VarDefAST>> varDefs;
+  std::vector<std::string> globalDecls;
+  std::vector<std::string> nonlocalDecls;
+  std::vector<std::unique_ptr<FunctionAST>> funcDefs;
+  std::vector<std::unique_ptr<StmtAST>> body;
 };
 
 /***********************************/

@@ -743,4 +743,51 @@ while x > 0:
   EXPECT_EQ(simpleStmt3->getBody().size(), 1);
 }
 
+TEST(ParserTest, TestFunctionDefinition) {
+  std::string program = R"(
+def foo(x: int, y: int) -> int:
+    global a
+    nonlocal b
+    
+    j: int = 2
+    k: int = 3
+    
+    def bar() -> int:
+        return a + a * 2
+         
+    if k == j + i:
+        return x + y
+    return x - y
+
+def baz():
+    pass
+)";
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  Parser parser(lexer);
+
+  auto programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+  const auto& funcDefs = programAST->getFuncDefs();
+  ASSERT_EQ(funcDefs.size(), 2);
+  auto funcDef = llvm::dyn_cast<FunctionAST>(funcDefs[0].get());
+  ASSERT_NE(funcDef, nullptr);
+  EXPECT_EQ(funcDef->getId(), "foo");
+  EXPECT_EQ(funcDef->getGlobalDecls().size(), 1);
+  EXPECT_EQ(funcDef->getNonlocalDecls().size(), 1);
+  EXPECT_EQ(funcDef->getBody().size(), 2);
+  EXPECT_EQ(funcDef->getArgs().size(), 2);
+  EXPECT_EQ(funcDef->getFuncDefs().size(), 1);
+
+  auto funcDef2 = llvm::dyn_cast<FunctionAST>(funcDefs[1].get());
+  ASSERT_NE(funcDef2, nullptr);
+  EXPECT_EQ(funcDef2->getId(), "baz");
+  EXPECT_EQ(funcDef2->getGlobalDecls().size(), 0);
+  EXPECT_EQ(funcDef2->getNonlocalDecls().size(), 0);
+  EXPECT_EQ(funcDef2->getBody().size(), 1);
+  EXPECT_EQ(funcDef2->getArgs().size(), 0);
+  EXPECT_EQ(funcDef2->getFuncDefs().size(), 0);
+  EXPECT_EQ(funcDef2->getReturnType(), nullptr);
+}
+
 } // namespace chocopy
