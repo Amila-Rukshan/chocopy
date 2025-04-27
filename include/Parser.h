@@ -27,6 +27,7 @@ public:
     std::vector<std::unique_ptr<VarDefAST>> varDefs;
     std::vector<std::unique_ptr<StmtAST>> stmts;
     std::vector<std::unique_ptr<FunctionAST>> funcDefs;
+    std::vector<std::unique_ptr<ClassAST>> classDefs;
     while (true) {
       Location location = lexer.getLastLocation();
       std::string id = lexer.getIdentifier();
@@ -52,12 +53,12 @@ public:
         funcDefs.push_back(parseFunction());
         break;
       case TokenKind::k_class:
-        // parse class definition
-        lexer.getNextToken();
+        classDefs.push_back(parseClass());
         break;
       case TokenKind::kEOF:
         return std::make_unique<ProgramAST>(
-            std::move(varDefs), std::move(funcDefs), std::move(stmts));
+            std::move(varDefs), std::move(funcDefs), std::move(classDefs),
+            std::move(stmts));
       }
     }
     return nullptr;
@@ -65,6 +66,58 @@ public:
 
 private:
   Lexer& lexer;
+
+  std::unique_ptr<ClassAST> parseClass() {
+    lexer.consume(TokenKind::k_class);
+    std::string id = lexer.getIdentifier();
+    Location idLocation = lexer.getLastLocation();
+
+    lexer.getNextToken();
+    lexer.consume(TokenKind::kOpenParantheses);
+
+    std::string superClassId = lexer.getIdentifier();
+    Location superClassIdLocation = lexer.getLastLocation();
+
+    lexer.getNextToken();
+    lexer.consume(TokenKind::kCloseParantheses);
+
+    lexer.consume(TokenKind::kColon);
+    lexer.consume(TokenKind::kNewLine);
+    lexer.consume(TokenKind::kIndent);
+
+    if (lexer.getCurToken() == TokenKind::k_pass) {
+      lexer.consume(TokenKind::k_pass);
+      lexer.consume(TokenKind::kNewLine);
+      lexer.consume(TokenKind::kDedent);
+      return std::make_unique<ClassAST>(
+          idLocation, id, superClassIdLocation, superClassId,
+          std::vector<std::unique_ptr<VarDefAST>>(),
+          std::vector<std::unique_ptr<FunctionAST>>());
+    }
+
+    std::vector<std::unique_ptr<FunctionAST>> funcDefs;
+    std::vector<std::unique_ptr<VarDefAST>> varDefs;
+
+    bool dclnsDone = false;
+
+    while (lexer.getCurToken() != TokenKind::kDedent && !dclnsDone) {
+      switch (lexer.getCurToken()) {
+      case TokenKind::kIdentifier:
+        varDefs.push_back(parseVarDef());
+        break;
+      case TokenKind::k_def:
+        funcDefs.push_back(parseFunction());
+        break;
+      default:
+        dclnsDone = true;
+        break;
+      }
+    }
+    lexer.consume(TokenKind::kDedent);
+    return std::make_unique<ClassAST>(idLocation, id, superClassIdLocation,
+                                      superClassId, std::move(varDefs),
+                                      std::move(funcDefs));
+  }
 
   std::unique_ptr<FunctionAST> parseFunction() {
     lexer.consume(TokenKind::k_def);

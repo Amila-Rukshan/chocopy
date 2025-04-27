@@ -17,6 +17,7 @@ class ExprAST;
 class TypeAST;
 class TypedVarAST;
 class FunctionAST;
+class ClassAST;
 
 /***********************************/
 /* Program                         */
@@ -26,15 +27,19 @@ class ProgramAST {
 public:
   ProgramAST(std::vector<std::unique_ptr<VarDefAST>> varDefs,
              std::vector<std::unique_ptr<FunctionAST>> funcDefs,
+             std::vector<std::unique_ptr<ClassAST>> classDefs,
              std::vector<std::unique_ptr<StmtAST>> stmts)
       : varDefs(std::move(varDefs)), funcDefs(std::move(funcDefs)),
-        stmts(std::move(stmts)) {}
+        classDefs(std::move(classDefs)), stmts(std::move(stmts)) {}
 
   const std::vector<std::unique_ptr<VarDefAST>>& getVarDefs() const {
     return varDefs;
   }
   const std::vector<std::unique_ptr<FunctionAST>>& getFuncDefs() const {
     return funcDefs;
+  }
+  const std::vector<std::unique_ptr<ClassAST>>& getClassDefs() const {
+    return classDefs;
   }
   const std::vector<std::unique_ptr<StmtAST>>& getStmts() const {
     return stmts;
@@ -43,7 +48,41 @@ public:
 private:
   std::vector<std::unique_ptr<VarDefAST>> varDefs;
   std::vector<std::unique_ptr<FunctionAST>> funcDefs;
+  std::vector<std::unique_ptr<ClassAST>> classDefs;
   std::vector<std::unique_ptr<StmtAST>> stmts;
+};
+
+/***********************************/
+/* Class                           */
+/***********************************/
+
+class ClassAST {
+public:
+  ClassAST(Location location, std::string id, Location superClassLocation,
+           std::string superClassId,
+           std::vector<std::unique_ptr<VarDefAST>> varDefs,
+           std::vector<std::unique_ptr<FunctionAST>> funcDefs)
+      : location(location), id(std::move(id)),
+        superClassLocation(std::move(superClassLocation)),
+        superClassId(std::move(superClassId)), varDefs(std::move(varDefs)),
+        funcDefs(std::move(funcDefs)) {}
+
+  const llvm::StringRef getId() const { return id; }
+  const llvm::StringRef getSuperClassId() const { return superClassId; }
+  const std::vector<std::unique_ptr<FunctionAST>>& getMethodDefs() const {
+    return funcDefs;
+  }
+  const std::vector<std::unique_ptr<VarDefAST>>& getVarDefs() const {
+    return varDefs;
+  }
+
+private:
+  Location location;
+  const std::string id;
+  Location superClassLocation;
+  const std::string superClassId;
+  std::vector<std::unique_ptr<VarDefAST>> varDefs;
+  std::vector<std::unique_ptr<FunctionAST>> funcDefs;
 };
 
 /***********************************/

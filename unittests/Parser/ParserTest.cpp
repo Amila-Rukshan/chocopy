@@ -790,4 +790,72 @@ def baz():
   EXPECT_EQ(funcDef2->getReturnType(), nullptr);
 }
 
+TEST(ParserTest, TestClassWithPassBody) {
+  std::string program = R"(
+class foo(object):
+    pass
+)";
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  Parser parser(lexer);
+
+  auto programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+  const auto& classDefs = programAST->getClassDefs();
+  ASSERT_EQ(classDefs.size(), 1);
+  auto classDef = classDefs[0].get();
+  ASSERT_NE(classDef, nullptr);
+  EXPECT_EQ(classDef->getId(), "foo");
+  EXPECT_EQ(classDef->getSuperClassId(), "object");
+  EXPECT_EQ(classDef->getMethodDefs().size(), 0);
+  EXPECT_EQ(classDef->getVarDefs().size(), 0);
+}
+
+TEST(ParserTest, TestClassDefinition) {
+  std::string program = R"(
+class animal(object):
+    makes_noise:bool = False
+
+    def make_noise(self: "animal") -> object:
+        if (self.makes_noise):
+            print(self.sound())
+
+    def sound(self: "animal") -> str:
+        return "???"
+
+class cow(animal):
+    def __init__(self: "cow"):
+        self.makes_noise = True
+
+    def sound(self: "cow") -> str:
+        return "moo"
+
+c:animal = None
+c = cow()
+c.make_noise() 
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  Parser parser(lexer);
+
+  auto programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+  const auto& classDefs = programAST->getClassDefs();
+  ASSERT_EQ(classDefs.size(), 2);
+  auto classDef = classDefs[0].get();
+  ASSERT_NE(classDef, nullptr);
+  EXPECT_EQ(classDef->getId(), "animal");
+  EXPECT_EQ(classDef->getSuperClassId(), "object");
+  EXPECT_EQ(classDef->getMethodDefs().size(), 2);
+  EXPECT_EQ(classDef->getVarDefs().size(), 1);
+
+  auto classDef2 = classDefs[1].get();
+  ASSERT_NE(classDef2, nullptr);
+  EXPECT_EQ(classDef2->getId(), "cow");
+  EXPECT_EQ(classDef2->getSuperClassId(), "animal");
+  EXPECT_EQ(classDef2->getMethodDefs().size(), 2);
+  EXPECT_EQ(classDef2->getVarDefs().size(), 0);
+}
+
 } // namespace chocopy
