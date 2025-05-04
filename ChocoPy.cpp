@@ -3,6 +3,7 @@
 
 #include "Lexer.h"
 #include "Parser.h"
+#include "CodeGen.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -28,7 +29,8 @@ void parseInputFile(llvm::StringRef filename) {
   chocopy::Parser parser(lexer);
   std::unique_ptr<chocopy::ProgramAST> program = parser.parseProgram();
 
-  const auto& varDefs = program->getVarDefs();
+  chocopy::LLVMCodeGenVisitor codegen;
+  codegen.codeGen(*program, filename);
 }
 
 int main(int argc, char** argv) {

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CHOCOPY_TOKEN_H
+#define CHOCOPY_TOKEN_H
 
 #include <memory>
 #include <string>
@@ -81,7 +82,7 @@ enum TokenKind {
   kIndexAccessOp, // []
 };
 
-std::string tokenKindToString(TokenKind kind) {
+inline std::string tokenKindToString(TokenKind kind) {
   static const std::unordered_map<TokenKind, std::string> tokenKindMap = {
       {TokenKind::k_False, "k_False"},
       {TokenKind::k_None, "k_None"},
@@ -160,3 +161,5 @@ struct Location {
 };
 
 } // namespace chocopy
+
+#endif // CHOCOPY_TOKEN_H

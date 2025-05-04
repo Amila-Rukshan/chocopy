@@ -18,6 +18,14 @@ class TypeAST;
 class TypedVarAST;
 class FunctionAST;
 class ClassAST;
+class ProgramAST;
+
+class ASTVisitor {
+public:
+  virtual ~ASTVisitor() = default;
+
+  virtual void visitProgram(const ProgramAST& program) = 0;
+};
 
 /***********************************/
 /* Program                         */
@@ -43,6 +51,10 @@ public:
   }
   const std::vector<std::unique_ptr<StmtAST>>& getStmts() const {
     return stmts;
+  }
+
+  void accept(ASTVisitor& visitor) const {
+    visitor.visitProgram(*this);
   }
 
 private:

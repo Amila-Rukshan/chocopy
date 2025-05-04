@@ -34,7 +34,9 @@ set(CMAKE_CXX_COMPILER "/usr/bin/clang++-17")
 
 include_directories(include/)
 
-add_executable(chocopyc ChocoPy.cpp)
+add_executable(chocopyc
+  ChocoPy.cpp
+  src/CodeGen.cpp)
 
 target_link_libraries(chocopyc
   PRIVATE
