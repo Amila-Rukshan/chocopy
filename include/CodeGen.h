@@ -16,8 +16,13 @@ public:
   ~LLVMCodeGenVisitor();
 
   void codeGen(const ProgramAST& program, llvm::StringRef program_path);
+  void codeGenMainFunc(const std::vector<std::unique_ptr<StmtAST>>& stmts);
+  void printLLVMBitCode(llvm::StringRef outputPath) const;
 
   void visitProgram(const ProgramAST& program) override;
+  void visitLiteralNumber(const LiteralNumberAST& literalNumber) override;
+  void visitLiteralTrue(const LiteralTrueAST& literalTrue) override;
+  void visitLiteralFalse(const LiteralFalseAST& literalFalse) override;
 
 private:
   std::unique_ptr<llvm::LLVMContext> context;

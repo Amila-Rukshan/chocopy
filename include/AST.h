@@ -4,6 +4,7 @@
 #include "Token.h"
 
 #include <llvm/ADT/StringRef.h>
+#include <llvm/IR/Value.h>
 
 #include <memory>
 #include <string>
@@ -12,19 +13,27 @@
 namespace chocopy {
 
 class VarDefAST;
-class StmtAST;
 class ExprAST;
+class StmtAST;
 class TypeAST;
 class TypedVarAST;
 class FunctionAST;
 class ClassAST;
 class ProgramAST;
 
+class LiteralNumberAST;
+class LiteralTrueAST;
+class LiteralFalseAST;
+
 class ASTVisitor {
 public:
   virtual ~ASTVisitor() = default;
 
   virtual void visitProgram(const ProgramAST& program) = 0;
+
+  virtual void visitLiteralNumber(const LiteralNumberAST& literalNumber) = 0;
+  virtual void visitLiteralTrue(const LiteralTrueAST& literalTrue) = 0;
+  virtual void visitLiteralFalse(const LiteralFalseAST& literalFalse) = 0;
 };
 
 /***********************************/
@@ -53,9 +62,7 @@ public:
     return stmts;
   }
 
-  void accept(ASTVisitor& visitor) const {
-    visitor.visitProgram(*this);
-  }
+  void accept(ASTVisitor& visitor) const { visitor.visitProgram(*this); }
 
 private:
   std::vector<std::unique_ptr<VarDefAST>> varDefs;
@@ -255,12 +262,26 @@ public:
 
   LiteralAST(LiteralASTKind kind, Location location)
       : kind(kind), location(std::move(location)) {}
+  virtual ~LiteralAST() = default;
 
   LiteralASTKind getKind() const { return kind; }
 
   const Location& loc() { return location; }
 
+  virtual void accept(ASTVisitor& visitor) const = 0;
+
+  void setCodegenValue(llvm::Value* value) const { codegenInfo->value = value; }
+
+  llvm::Value* getCodegenValue() const {
+    assert(codegenInfo->value != nullptr);
+    return codegenInfo->value;
+  }
+
 private:
+  struct CodegenInfo {
+    llvm::Value* value = nullptr;
+  };
+  std::unique_ptr<CodegenInfo> codegenInfo = std::make_unique<CodegenInfo>();
   const LiteralASTKind kind;
   Location location;
 };
@@ -269,6 +290,8 @@ class LiteralNoneAST : public LiteralAST {
 public:
   LiteralNoneAST(Location location)
       : LiteralAST(LiteralAST::Literal_None, std::move(location)) {}
+
+  void accept(ASTVisitor& visitor) const override {}
 
   /// LLVM style RTTI
   static bool classof(const LiteralAST* c) {
@@ -281,6 +304,10 @@ public:
   LiteralTrueAST(Location location)
       : LiteralAST(LiteralAST::Literal_True, std::move(location)) {}
 
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitLiteralTrue(*this);
+  }
+
   /// LLVM style RTTI
   static bool classof(const LiteralAST* c) {
     return c->getKind() == LiteralAST::Literal_True;
@@ -291,6 +318,10 @@ class LiteralFalseAST : public LiteralAST {
 public:
   LiteralFalseAST(Location location)
       : LiteralAST(LiteralAST::Literal_False, std::move(location)) {}
+
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitLiteralFalse(*this);
+  }
 
   /// LLVM style RTTI
   static bool classof(const LiteralAST* c) {
@@ -305,6 +336,10 @@ public:
         number(number) {}
 
   int getNumber() const { return number; }
+
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitLiteralNumber(*this);
+  }
 
   /// LLVM style RTTI
   static bool classof(const LiteralAST* c) {
@@ -323,6 +358,8 @@ public:
 
   const llvm::StringRef getStr() const { return str; }
 
+  void accept(ASTVisitor& visitor) const override {}
+
   /// LLVM style RTTI
   static bool classof(const LiteralAST* c) {
     return c->getKind() == LiteralAST::Literal_String;
@@ -339,6 +376,8 @@ public:
         id(std::move(id)) {}
 
   const llvm::StringRef getId() const { return id; }
+
+  void accept(ASTVisitor& visitor) const override {}
 
   /// LLVM style RTTI
   static bool classof(const LiteralAST* c) {
@@ -364,191 +403,6 @@ public:
 private:
   std::unique_ptr<TypedVarAST> typedVar;
   std::unique_ptr<LiteralAST> literal;
-};
-
-/***********************************/
-/* Statement                       */
-/***********************************/
-
-class StmtAST {
-public:
-  enum StmtASTKind { Stmt_Simple, Stmt_If, Stmt_While, Stmt_For };
-
-  StmtAST(StmtASTKind kind, Location location)
-      : kind(kind), location(std::move(location)) {}
-  virtual ~StmtAST() = default;
-
-  StmtASTKind getKind() const { return kind; }
-
-  const Location& loc() { return location; }
-
-private:
-  const StmtASTKind kind;
-  Location location;
-};
-
-class StmtIfAST : public StmtAST {
-public:
-  StmtIfAST(Location location, std::unique_ptr<ExprAST> condition,
-            std::vector<std::unique_ptr<StmtAST>> body,
-            std::vector<std::unique_ptr<StmtIfAST>> elifs,
-            std::vector<std::unique_ptr<StmtAST>> elseBody)
-      : StmtAST(StmtASTKind::Stmt_If, std::move(location)),
-        condition(std::move(condition)), body(std::move(body)),
-        elifs(std::move(elifs)), elseBody(std::move(elseBody)) {}
-
-  const ExprAST* getCondition() const { return condition.get(); }
-  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
-  const std::vector<std::unique_ptr<StmtIfAST>>& getElifs() const {
-    return elifs;
-  }
-  const std::vector<std::unique_ptr<StmtAST>>& getElseBody() const {
-    return elseBody;
-  }
-
-  /// LLVM style RTTI
-  static bool classof(const StmtAST* c) {
-    return c->getKind() == StmtASTKind::Stmt_If;
-  }
-
-private:
-  std::unique_ptr<ExprAST> condition;
-  std::vector<std::unique_ptr<StmtAST>> body;
-  std::vector<std::unique_ptr<StmtIfAST>> elifs;
-  std::vector<std::unique_ptr<StmtAST>> elseBody;
-};
-
-class StmtWhileAST : public StmtAST {
-public:
-  StmtWhileAST(Location location, std::unique_ptr<ExprAST> condition,
-               std::vector<std::unique_ptr<StmtAST>> body)
-      : StmtAST(StmtASTKind::Stmt_While, std::move(location)),
-        condition(std::move(condition)), body(std::move(body)) {}
-
-  const ExprAST* getCondition() const { return condition.get(); }
-  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
-
-  /// LLVM style RTTI
-  static bool classof(const StmtAST* c) {
-    return c->getKind() == StmtASTKind::Stmt_While;
-  }
-
-private:
-  std::unique_ptr<ExprAST> condition;
-  std::vector<std::unique_ptr<StmtAST>> body;
-};
-
-class StmtForAST : public StmtAST {
-public:
-  StmtForAST(Location location, std::unique_ptr<ExprAST> expr,
-             std::unique_ptr<TypedVarAST> typedVar,
-             std::vector<std::unique_ptr<StmtAST>> body)
-      : StmtAST(StmtASTKind::Stmt_For, std::move(location)),
-        expr(std::move(expr)), body(std::move(body)) {}
-
-  const ExprAST* getExpr() const { return expr.get(); }
-  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
-
-  /// LLVM style RTTI
-  static bool classof(const StmtAST* c) {
-    return c->getKind() == StmtASTKind::Stmt_For;
-  }
-
-private:
-  std::unique_ptr<ExprAST> expr;
-  std::vector<std::unique_ptr<StmtAST>> body;
-};
-
-class SimpleStmtAST : public StmtAST {
-public:
-  enum SimpleStmtASTKind {
-    SimpleStmt_Pass,
-    SimpleStmt_Expr,
-    SimpleStmt_Return,
-    SimpleStmt_Assign
-  };
-
-  SimpleStmtAST(Location location, SimpleStmtASTKind kind)
-      : StmtAST(StmtASTKind::Stmt_Simple, std::move(location)), kind(kind) {}
-
-  SimpleStmtASTKind getKind() const { return kind; }
-
-  /// LLVM style RTTI
-  static bool classof(const StmtAST* c) {
-    return c->getKind() == StmtASTKind::Stmt_Simple;
-  }
-
-private:
-  const SimpleStmtASTKind kind;
-};
-
-class SimpleStmtPassAST : public SimpleStmtAST {
-public:
-  SimpleStmtPassAST(Location location)
-      : SimpleStmtAST(std::move(location), SimpleStmtAST::SimpleStmt_Pass) {}
-
-  /// LLVM style RTTI
-  static bool classof(const SimpleStmtAST* c) {
-    return c->getKind() == SimpleStmtAST::SimpleStmt_Pass;
-  }
-};
-
-class SimpleStmtExprAST : public SimpleStmtAST {
-public:
-  SimpleStmtExprAST(Location location, std::unique_ptr<ExprAST> expr)
-      : SimpleStmtAST(std::move(location), SimpleStmtAST::SimpleStmt_Expr),
-        expr(std::move(expr)) {}
-
-  const ExprAST* getExpr() const { return expr.get(); }
-
-  /// LLVM style RTTI
-  static bool classof(const SimpleStmtAST* c) {
-    return c->getKind() == SimpleStmtAST::SimpleStmt_Expr;
-  }
-
-private:
-  std::unique_ptr<ExprAST> expr;
-};
-
-class SimpleStmtReturnAST : public SimpleStmtAST {
-public:
-  SimpleStmtReturnAST(Location location, std::unique_ptr<ExprAST> expr)
-      : SimpleStmtAST(std::move(location), SimpleStmtAST::SimpleStmt_Return),
-        expr(std::move(expr)) {}
-
-  const ExprAST* getExpr() const { return expr.get(); }
-
-  /// LLVM style RTTI
-  static bool classof(const SimpleStmtAST* c) {
-    return c->getKind() == SimpleStmtAST::SimpleStmt_Return;
-  }
-
-private:
-  std::unique_ptr<ExprAST> expr;
-};
-
-class SimpleStmtAssignAST : public SimpleStmtAST {
-public:
-  SimpleStmtAssignAST(Location location,
-                      std::vector<std::unique_ptr<ExprAST>> targets,
-                      std::unique_ptr<ExprAST> rhs)
-      : SimpleStmtAST(std::move(location), SimpleStmtAST::SimpleStmt_Assign),
-        targets(std::move(targets)), rhs(std::move(rhs)) {}
-
-  const std::vector<std::unique_ptr<ExprAST>>& getTargets() const {
-    return targets;
-  }
-
-  const ExprAST* getRhs() const { return rhs.get(); }
-
-  /// LLVM style RTTI
-  static bool classof(const SimpleStmtAST* c) {
-    return c->getKind() == SimpleStmtAST::SimpleStmt_Assign;
-  }
-
-private:
-  std::vector<std::unique_ptr<ExprAST>> targets;
-  std::unique_ptr<ExprAST> rhs;
 };
 
 /***********************************/
@@ -579,6 +433,8 @@ public:
 
   const Location& loc() { return location; }
 
+  virtual void accept(ASTVisitor& visitor) const = 0;
+
 private:
   const ExprASTKind kind;
   Location location;
@@ -590,6 +446,8 @@ public:
       : ExprAST(ExprAST::Expr_Id, std::move(location)), id(std::move(id)) {}
 
   const llvm::StringRef getId() const { return id; }
+
+  void accept(ASTVisitor& visitor) const override {}
 
   /// LLVM style RTTI
   static bool classof(const ExprAST* c) {
@@ -607,6 +465,8 @@ public:
         literal(std::move(literal)) {}
 
   const LiteralAST* getLiteral() const { return literal.get(); }
+
+  void accept(ASTVisitor& visitor) const override { literal->accept(visitor); }
 
   /// LLVM style RTTI
   static bool classof(const ExprAST* c) {
@@ -628,6 +488,8 @@ public:
     return elements;
   }
 
+  void accept(ASTVisitor& visitor) const override {}
+
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {
     return c->getKind() == ExprAST::Expr_ListLiteral;
@@ -647,6 +509,8 @@ public:
   const ExprAST* getCallee() const { return callee.get(); }
   const std::vector<std::unique_ptr<ExprAST>>& getArgs() const { return args; }
 
+  void accept(ASTVisitor& visitor) const override {}
+
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {
     return c->getKind() == ExprAST::Expr_Call;
@@ -665,6 +529,8 @@ public:
 
   const std::unique_ptr<ExprAST>& getArgs() const { return printArg; }
 
+  void accept(ASTVisitor& visitor) const override {}
+
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {
     return c->getKind() == ExprAST::Expr_Print;
@@ -679,6 +545,8 @@ public:
   InputExprAST(Location location, std::string id)
       : ExprAST(ExprAST::Expr_Input, std::move(location)) {}
 
+  void accept(ASTVisitor& visitor) const override {}
+
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {
     return c->getKind() == ExprAST::Expr_Input;
@@ -689,6 +557,8 @@ class LenExprAST : public ExprAST {
 public:
   LenExprAST(Location location, std::unique_ptr<ExprAST> expr)
       : ExprAST(ExprAST::Expr_Len, std::move(location)) {}
+
+  void accept(ASTVisitor& visitor) const override {}
 
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {
@@ -708,6 +578,8 @@ public:
   const ExprAST* getCondition() const { return condition.get(); }
   const ExprAST* getIfBody() const { return ifBody.get(); }
   const ExprAST* getElseBody() const { return elseBody.get(); }
+
+  void accept(ASTVisitor& visitor) const override {}
 
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {
@@ -731,6 +603,8 @@ public:
   const ExprAST* getRhs() const { return rhs.get(); }
   TokenKind getOp() const { return op; }
 
+  void accept(ASTVisitor& visitor) const override {}
+
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {
     return c->getKind() == ExprAST::Expr_BinaryOp;
@@ -751,6 +625,8 @@ public:
   const ExprAST* getExpr() const { return expr.get(); }
   TokenKind getOp() const { return op; }
 
+  void accept(ASTVisitor& visitor) const override {}
+
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {
     return c->getKind() == ExprAST::Expr_UnaryOp;
@@ -759,6 +635,209 @@ public:
 private:
   std::unique_ptr<ExprAST> expr;
   TokenKind op;
+};
+
+/***********************************/
+/* Statement                       */
+/***********************************/
+
+class StmtAST {
+public:
+  enum StmtASTKind { Stmt_Simple, Stmt_If, Stmt_While, Stmt_For };
+
+  StmtAST(StmtASTKind kind, Location location)
+      : kind(kind), location(std::move(location)) {}
+  virtual ~StmtAST() = default;
+
+  StmtASTKind getKind() const { return kind; }
+
+  const Location& loc() { return location; }
+
+  virtual void accept(ASTVisitor& visitor) const = 0;
+
+private:
+  const StmtASTKind kind;
+  Location location;
+};
+
+class StmtIfAST : public StmtAST {
+public:
+  StmtIfAST(Location location, std::unique_ptr<ExprAST> condition,
+            std::vector<std::unique_ptr<StmtAST>> body,
+            std::vector<std::unique_ptr<StmtIfAST>> elifs,
+            std::vector<std::unique_ptr<StmtAST>> elseBody)
+      : StmtAST(StmtASTKind::Stmt_If, std::move(location)),
+        condition(std::move(condition)), body(std::move(body)),
+        elifs(std::move(elifs)), elseBody(std::move(elseBody)) {}
+
+  const ExprAST* getCondition() const { return condition.get(); }
+  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
+  const std::vector<std::unique_ptr<StmtIfAST>>& getElifs() const {
+    return elifs;
+  }
+  const std::vector<std::unique_ptr<StmtAST>>& getElseBody() const {
+    return elseBody;
+  }
+
+  void accept(ASTVisitor& visitor) const override {}
+
+  /// LLVM style RTTI
+  static bool classof(const StmtAST* c) {
+    return c->getKind() == StmtASTKind::Stmt_If;
+  }
+
+private:
+  std::unique_ptr<ExprAST> condition;
+  std::vector<std::unique_ptr<StmtAST>> body;
+  std::vector<std::unique_ptr<StmtIfAST>> elifs;
+  std::vector<std::unique_ptr<StmtAST>> elseBody;
+};
+
+class StmtWhileAST : public StmtAST {
+public:
+  StmtWhileAST(Location location, std::unique_ptr<ExprAST> condition,
+               std::vector<std::unique_ptr<StmtAST>> body)
+      : StmtAST(StmtASTKind::Stmt_While, std::move(location)),
+        condition(std::move(condition)), body(std::move(body)) {}
+
+  const ExprAST* getCondition() const { return condition.get(); }
+  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
+
+  void accept(ASTVisitor& visitor) const override {}
+
+  /// LLVM style RTTI
+  static bool classof(const StmtAST* c) {
+    return c->getKind() == StmtASTKind::Stmt_While;
+  }
+
+private:
+  std::unique_ptr<ExprAST> condition;
+  std::vector<std::unique_ptr<StmtAST>> body;
+};
+
+class StmtForAST : public StmtAST {
+public:
+  StmtForAST(Location location, std::unique_ptr<ExprAST> expr,
+             std::unique_ptr<TypedVarAST> typedVar,
+             std::vector<std::unique_ptr<StmtAST>> body)
+      : StmtAST(StmtASTKind::Stmt_For, std::move(location)),
+        expr(std::move(expr)), body(std::move(body)) {}
+
+  const ExprAST* getExpr() const { return expr.get(); }
+  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
+
+  void accept(ASTVisitor& visitor) const override {}
+
+  /// LLVM style RTTI
+  static bool classof(const StmtAST* c) {
+    return c->getKind() == StmtASTKind::Stmt_For;
+  }
+
+private:
+  std::unique_ptr<ExprAST> expr;
+  std::vector<std::unique_ptr<StmtAST>> body;
+};
+
+class SimpleStmtAST : public StmtAST {
+public:
+  enum SimpleStmtASTKind {
+    SimpleStmt_Pass,
+    SimpleStmt_Expr,
+    SimpleStmt_Return,
+    SimpleStmt_Assign
+  };
+
+  SimpleStmtAST(Location location, SimpleStmtASTKind kind)
+      : StmtAST(StmtASTKind::Stmt_Simple, std::move(location)), kind(kind) {}
+
+  SimpleStmtASTKind getKind() const { return kind; }
+
+  void accept(ASTVisitor& visitor) const override {}
+
+  /// LLVM style RTTI
+  static bool classof(const StmtAST* c) {
+    return c->getKind() == StmtASTKind::Stmt_Simple;
+  }
+
+private:
+  const SimpleStmtASTKind kind;
+};
+
+class SimpleStmtPassAST : public SimpleStmtAST {
+public:
+  SimpleStmtPassAST(Location location)
+      : SimpleStmtAST(std::move(location), SimpleStmtAST::SimpleStmt_Pass) {}
+
+  void accept(ASTVisitor& visitor) const override {}
+
+  /// LLVM style RTTI
+  static bool classof(const SimpleStmtAST* c) {
+    return c->getKind() == SimpleStmtAST::SimpleStmt_Pass;
+  }
+};
+
+class SimpleStmtExprAST : public SimpleStmtAST {
+public:
+  SimpleStmtExprAST(Location location, std::unique_ptr<ExprAST> expr)
+      : SimpleStmtAST(std::move(location), SimpleStmtAST::SimpleStmt_Expr),
+        expr(std::move(expr)) {}
+
+  const ExprAST* getExpr() const { return expr.get(); }
+
+  void accept(ASTVisitor& visitor) const override { expr->accept(visitor); }
+
+  /// LLVM style RTTI
+  static bool classof(const SimpleStmtAST* c) {
+    return c->getKind() == SimpleStmtAST::SimpleStmt_Expr;
+  }
+
+private:
+  std::unique_ptr<ExprAST> expr;
+};
+
+class SimpleStmtReturnAST : public SimpleStmtAST {
+public:
+  SimpleStmtReturnAST(Location location, std::unique_ptr<ExprAST> expr)
+      : SimpleStmtAST(std::move(location), SimpleStmtAST::SimpleStmt_Return),
+        expr(std::move(expr)) {}
+
+  const ExprAST* getExpr() const { return expr.get(); }
+
+  void accept(ASTVisitor& visitor) const override {}
+
+  /// LLVM style RTTI
+  static bool classof(const SimpleStmtAST* c) {
+    return c->getKind() == SimpleStmtAST::SimpleStmt_Return;
+  }
+
+private:
+  std::unique_ptr<ExprAST> expr;
+};
+
+class SimpleStmtAssignAST : public SimpleStmtAST {
+public:
+  SimpleStmtAssignAST(Location location,
+                      std::vector<std::unique_ptr<ExprAST>> targets,
+                      std::unique_ptr<ExprAST> rhs)
+      : SimpleStmtAST(std::move(location), SimpleStmtAST::SimpleStmt_Assign),
+        targets(std::move(targets)), rhs(std::move(rhs)) {}
+
+  const std::vector<std::unique_ptr<ExprAST>>& getTargets() const {
+    return targets;
+  }
+
+  const ExprAST* getRhs() const { return rhs.get(); }
+
+  void accept(ASTVisitor& visitor) const override {}
+
+  /// LLVM style RTTI
+  static bool classof(const SimpleStmtAST* c) {
+    return c->getKind() == SimpleStmtAST::SimpleStmt_Assign;
+  }
+
+private:
+  std::vector<std::unique_ptr<ExprAST>> targets;
+  std::unique_ptr<ExprAST> rhs;
 };
 
 } // namespace chocopy

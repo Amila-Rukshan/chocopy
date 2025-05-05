@@ -31,6 +31,7 @@ void parseInputFile(llvm::StringRef filename) {
 
   chocopy::LLVMCodeGenVisitor codegen;
   codegen.codeGen(*program, filename);
+  codegen.printLLVMBitCode(filename.data());
 }
 
 int main(int argc, char** argv) {
