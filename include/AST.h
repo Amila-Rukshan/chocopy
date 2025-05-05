@@ -24,6 +24,7 @@ class ProgramAST;
 class LiteralNumberAST;
 class LiteralTrueAST;
 class LiteralFalseAST;
+class LiteralStringAST;
 
 class ASTVisitor {
 public:
@@ -34,6 +35,7 @@ public:
   virtual void visitLiteralNumber(const LiteralNumberAST& literalNumber) = 0;
   virtual void visitLiteralTrue(const LiteralTrueAST& literalTrue) = 0;
   virtual void visitLiteralFalse(const LiteralFalseAST& literalFalse) = 0;
+  virtual void visitLiteralString(const LiteralStringAST& literalString) = 0;
 };
 
 /***********************************/
@@ -358,7 +360,9 @@ public:
 
   const llvm::StringRef getStr() const { return str; }
 
-  void accept(ASTVisitor& visitor) const override {}
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitLiteralString(*this);
+  }
 
   /// LLVM style RTTI
   static bool classof(const LiteralAST* c) {
