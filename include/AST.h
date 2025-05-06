@@ -26,6 +26,8 @@ class LiteralTrueAST;
 class LiteralFalseAST;
 class LiteralStringAST;
 
+class CallExprAST;
+
 class ASTVisitor {
 public:
   virtual ~ASTVisitor() = default;
@@ -36,6 +38,7 @@ public:
   virtual void visitLiteralTrue(const LiteralTrueAST& literalTrue) = 0;
   virtual void visitLiteralFalse(const LiteralFalseAST& literalFalse) = 0;
   virtual void visitLiteralString(const LiteralStringAST& literalString) = 0;
+  virtual void visitCallExpr(const CallExprAST& callExpr) = 0;
 };
 
 /***********************************/
@@ -274,10 +277,7 @@ public:
 
   void setCodegenValue(llvm::Value* value) const { codegenInfo->value = value; }
 
-  llvm::Value* getCodegenValue() const {
-    assert(codegenInfo->value != nullptr);
-    return codegenInfo->value;
-  }
+  llvm::Value* getCodegenValue() const { return codegenInfo->value; }
 
 private:
   struct CodegenInfo {
@@ -432,14 +432,17 @@ public:
   ExprAST(ExprASTKind kind, Location location)
       : kind(kind), location(std::move(location)) {}
   virtual ~ExprAST() = default;
-
   ExprASTKind getKind() const { return kind; }
-
   const Location& loc() { return location; }
-
   virtual void accept(ASTVisitor& visitor) const = 0;
+  void setCodegenValue(llvm::Value* value) const { codegenInfo->value = value; }
+  llvm::Value* getCodegenValue() const { return codegenInfo->value; }
 
 private:
+  struct CodegenInfo {
+    llvm::Value* value = nullptr;
+  };
+  std::unique_ptr<CodegenInfo> codegenInfo = std::make_unique<CodegenInfo>();
   const ExprASTKind kind;
   Location location;
 };
@@ -470,7 +473,10 @@ public:
 
   const LiteralAST* getLiteral() const { return literal.get(); }
 
-  void accept(ASTVisitor& visitor) const override { literal->accept(visitor); }
+  void accept(ASTVisitor& visitor) const override {
+    literal->accept(visitor);
+    setCodegenValue(literal->getCodegenValue());
+  }
 
   /// LLVM style RTTI
   static bool classof(const ExprAST* c) {
@@ -513,7 +519,9 @@ public:
   const ExprAST* getCallee() const { return callee.get(); }
   const std::vector<std::unique_ptr<ExprAST>>& getArgs() const { return args; }
 
-  void accept(ASTVisitor& visitor) const override {}
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitCallExpr(*this);
+  }
 
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {

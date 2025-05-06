@@ -25,6 +25,7 @@ public:
   void visitLiteralTrue(const LiteralTrueAST& literalTrue) override;
   void visitLiteralFalse(const LiteralFalseAST& literalFalse) override;
   void visitLiteralString(const LiteralStringAST& literalString) override;
+  void visitCallExpr(const CallExprAST& callExpr) override;
 
   llvm::Type* llvmType(std::string typeName) const;
 
