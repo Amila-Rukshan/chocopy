@@ -275,11 +275,19 @@ public:
 
   virtual void accept(ASTVisitor& visitor) const = 0;
 
+  void setTypeInfo(const std::string& type) const { typeInfo->type = type; }
+
+  const std::string& getTypeInfo() const { return typeInfo->type; }
+
   void setCodegenValue(llvm::Value* value) const { codegenInfo->value = value; }
 
   llvm::Value* getCodegenValue() const { return codegenInfo->value; }
 
 private:
+  struct TypeInfo {
+    std::string type = "UNTYPED";
+  };
+  std::unique_ptr<TypeInfo> typeInfo = std::make_unique<TypeInfo>();
   struct CodegenInfo {
     llvm::Value* value = nullptr;
   };
@@ -432,13 +440,24 @@ public:
   ExprAST(ExprASTKind kind, Location location)
       : kind(kind), location(std::move(location)) {}
   virtual ~ExprAST() = default;
+
   ExprASTKind getKind() const { return kind; }
+
   const Location& loc() { return location; }
+
   virtual void accept(ASTVisitor& visitor) const = 0;
+
+  void setTypeInfo(const std::string& type) const { typeInfo->type = type; }
+  const std::string& getTypeInfo() const { return typeInfo->type; }
+
   void setCodegenValue(llvm::Value* value) const { codegenInfo->value = value; }
   llvm::Value* getCodegenValue() const { return codegenInfo->value; }
 
 private:
+  struct TypeInfo {
+    std::string type = "UNTYPED";
+  };
+  std::unique_ptr<TypeInfo> typeInfo = std::make_unique<TypeInfo>();
   struct CodegenInfo {
     llvm::Value* value = nullptr;
   };
@@ -476,6 +495,7 @@ public:
   void accept(ASTVisitor& visitor) const override {
     literal->accept(visitor);
     setCodegenValue(literal->getCodegenValue());
+    setTypeInfo(literal->getTypeInfo());
   }
 
   /// LLVM style RTTI

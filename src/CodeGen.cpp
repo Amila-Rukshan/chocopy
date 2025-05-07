@@ -85,7 +85,7 @@ void LLVMCodeGenVisitor::visitLiteralString(
       llvm::cast<llvm::Constant>(stringConstant), ".str");
 
   llvm::Value* stringPtr = builder->CreateConstGEP1_64(
-      stringConstant->getType(), globalString, 0, "str_ptr");
+      stringConstant->getType(), globalString, 0, ".str_ptr");
 
   literalString.setCodegenValue(stringPtr);
 }
@@ -94,25 +94,27 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   for (auto& arg : callExpr.getArgs()) {
     arg->accept(*this);
   }
+  llvm::Function* calleeFunc = nullptr;
   if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
     if (callee->getId() == "print") {
-      llvm::Function* calleeFunc = module->getFunction("printf");
+      calleeFunc = module->getFunction("printf");
       if (!calleeFunc) {
         llvm::errs() << "Unknown function referenced 'printf'\n";
         return;
       }
-      std::vector<llvm::Value*> args;
-      for (const auto& arg : callExpr.getArgs()) {
-        llvm::Value* argVal = arg->getCodegenValue();
-        if (argVal == nullptr) {
-          llvm::errs() << "Unknown argument";
-          return;
-        }
-        args.push_back(argVal);
-      }
-      builder->CreateCall(calleeFunc, args);
     }
   }
+  assert(calleeFunc && "Function could not be found");
+  std::vector<llvm::Value*> args;
+  for (const auto& arg : callExpr.getArgs()) {
+    llvm::Value* argVal = arg->getCodegenValue();
+    if (argVal == nullptr) {
+      llvm::errs() << "Unknown argument";
+      return;
+    }
+    args.push_back(argVal);
+  }
+  builder->CreateCall(calleeFunc, args);
 }
 
 void LLVMCodeGenVisitor::createBuiltinFuncDecl(
