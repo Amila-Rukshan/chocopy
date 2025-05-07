@@ -26,8 +26,11 @@ public:
   ~SemanticCheckVisitor();
 
   std::vector<SemanticError> check(const ProgramAST& program);
+  std::vector<SemanticError>
+  checkInheritance(const ProgramAST& program);
 
   void visitProgram(const ProgramAST& program) override;
+  void visitClass(const ClassAST& clazz) override;
   void visitLiteralNumber(const LiteralNumberAST& literalNumber) override;
   void visitLiteralTrue(const LiteralTrueAST& literalTrue) override;
   void visitLiteralFalse(const LiteralFalseAST& literalFalse) override;
@@ -36,6 +39,7 @@ public:
 
 private:
   std::vector<SemanticError> errors;
+  std::vector<std::string> definedClassIds = {"object"};
 };
 
 } // namespace chocopy

@@ -34,46 +34,13 @@ public:
 
   virtual void visitProgram(const ProgramAST& program) = 0;
 
+  virtual void visitClass(const ClassAST& clazz) = 0;
+
   virtual void visitLiteralNumber(const LiteralNumberAST& literalNumber) = 0;
   virtual void visitLiteralTrue(const LiteralTrueAST& literalTrue) = 0;
   virtual void visitLiteralFalse(const LiteralFalseAST& literalFalse) = 0;
   virtual void visitLiteralString(const LiteralStringAST& literalString) = 0;
   virtual void visitCallExpr(const CallExprAST& callExpr) = 0;
-};
-
-/***********************************/
-/* Program                         */
-/***********************************/
-
-class ProgramAST {
-public:
-  ProgramAST(std::vector<std::unique_ptr<VarDefAST>> varDefs,
-             std::vector<std::unique_ptr<FunctionAST>> funcDefs,
-             std::vector<std::unique_ptr<ClassAST>> classDefs,
-             std::vector<std::unique_ptr<StmtAST>> stmts)
-      : varDefs(std::move(varDefs)), funcDefs(std::move(funcDefs)),
-        classDefs(std::move(classDefs)), stmts(std::move(stmts)) {}
-
-  const std::vector<std::unique_ptr<VarDefAST>>& getVarDefs() const {
-    return varDefs;
-  }
-  const std::vector<std::unique_ptr<FunctionAST>>& getFuncDefs() const {
-    return funcDefs;
-  }
-  const std::vector<std::unique_ptr<ClassAST>>& getClassDefs() const {
-    return classDefs;
-  }
-  const std::vector<std::unique_ptr<StmtAST>>& getStmts() const {
-    return stmts;
-  }
-
-  void accept(ASTVisitor& visitor) const { visitor.visitProgram(*this); }
-
-private:
-  std::vector<std::unique_ptr<VarDefAST>> varDefs;
-  std::vector<std::unique_ptr<FunctionAST>> funcDefs;
-  std::vector<std::unique_ptr<ClassAST>> classDefs;
-  std::vector<std::unique_ptr<StmtAST>> stmts;
 };
 
 /***********************************/
@@ -91,6 +58,8 @@ public:
         superClassId(std::move(superClassId)), varDefs(std::move(varDefs)),
         funcDefs(std::move(funcDefs)) {}
 
+  void accept(ASTVisitor& visitor) { visitor.visitClass(*this); };
+
   const llvm::StringRef getId() const { return id; }
   const llvm::StringRef getSuperClassId() const { return superClassId; }
   const std::vector<std::unique_ptr<FunctionAST>>& getMethodDefs() const {
@@ -100,6 +69,15 @@ public:
     return varDefs;
   }
 
+  const Location& classLoc() { return location; }
+  const Location& superClassLoc() { return superClassLocation; }
+
+  void setParentClass(const ClassAST* classPtr) { parentClass = classPtr; }
+
+  void AddChildClass(const ClassAST* classPtr) {
+    childClasses.push_back(classPtr);
+  }
+
 private:
   Location location;
   const std::string id;
@@ -107,6 +85,64 @@ private:
   const std::string superClassId;
   std::vector<std::unique_ptr<VarDefAST>> varDefs;
   std::vector<std::unique_ptr<FunctionAST>> funcDefs;
+  std::vector<const ClassAST*> childClasses;
+  const ClassAST* parentClass;
+};
+
+/***********************************/
+/* Program                         */
+/***********************************/
+
+class ProgramAST {
+public:
+  ProgramAST(std::vector<std::unique_ptr<VarDefAST>> varDefs,
+             std::vector<std::unique_ptr<FunctionAST>> funcDefs,
+             std::vector<std::unique_ptr<ClassAST>> classDefs,
+             std::vector<std::unique_ptr<StmtAST>> stmts)
+      : varDefs(std::move(varDefs)), funcDefs(std::move(funcDefs)),
+        classDefs(std::move(classDefs)), stmts(std::move(stmts)),
+        objectClass(std::make_unique<ClassAST>(
+            Location{nullptr, 0, 0}, "object", Location{nullptr, 0, 0}, "epic",
+            std::vector<std::unique_ptr<VarDefAST>>(),
+            std::vector<std::unique_ptr<FunctionAST>>())) {
+    for (auto& classDef : this->classDefs) {
+      classIdToClassAST[classDef->getId().str()] = classDef.get();
+    }
+    classIdToClassAST["object"] = objectClass.get();
+  }
+
+  const std::vector<std::unique_ptr<VarDefAST>>& getVarDefs() const {
+    return varDefs;
+  }
+  const std::vector<std::unique_ptr<FunctionAST>>& getFuncDefs() const {
+    return funcDefs;
+  }
+  const std::vector<std::unique_ptr<ClassAST>>& getClassDefs() const {
+    return classDefs;
+  }
+  const std::vector<std::unique_ptr<StmtAST>>& getStmts() const {
+    return stmts;
+  }
+
+  void accept(ASTVisitor& visitor) const { visitor.visitProgram(*this); }
+
+  ClassAST* GetClassPtr(const std::string& classId) const {
+    auto classAST = classIdToClassAST.find(classId);
+    if (classAST == classIdToClassAST.end()) {
+      return nullptr;
+    } else {
+      return classAST->second;
+    }
+  }
+
+private:
+  std::vector<std::unique_ptr<VarDefAST>> varDefs;
+  std::vector<std::unique_ptr<FunctionAST>> funcDefs;
+  std::vector<std::unique_ptr<ClassAST>> classDefs;
+  std::vector<std::unique_ptr<StmtAST>> stmts;
+
+  std::unique_ptr<ClassAST> objectClass;
+  std::unordered_map<std::string, ClassAST*> classIdToClassAST;
 };
 
 /***********************************/

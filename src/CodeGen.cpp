@@ -38,6 +38,8 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
   codeGenMainFunc(program.getStmts());
 }
 
+void LLVMCodeGenVisitor::visitClass(const ClassAST& clazz) {}
+
 void LLVMCodeGenVisitor::codeGenMainFunc(
     const std::vector<std::unique_ptr<StmtAST>>& stmts) {
   llvm::FunctionType* funcType =
