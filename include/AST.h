@@ -41,6 +41,8 @@ public:
   virtual void visitLiteralFalse(const LiteralFalseAST& literalFalse) = 0;
   virtual void visitLiteralString(const LiteralStringAST& literalString) = 0;
   virtual void visitCallExpr(const CallExprAST& callExpr) = 0;
+  virtual void visitVarDef(const VarDefAST& varDef) = 0;
+  virtual void visitTypedVar(const TypedVarAST& typedVar) = 0;
 };
 
 /***********************************/
@@ -206,7 +208,7 @@ public:
 
   TypeASTKind getKind() const { return kind; }
 
-  const Location& loc() { return location; }
+  const Location& loc() const { return location; }
 
 private:
   const TypeASTKind kind;
@@ -278,9 +280,21 @@ public:
   const llvm::StringRef getId() const { return id; }
 
   const TypeAST* getType() const { return type.get(); }
-  const Location& loc() { return location; }
+  const Location& loc() const { return location; }
+
+  virtual void accept(ASTVisitor& visitor) const {
+    visitor.visitTypedVar(*this);
+  };
+
+  void setTypeInfo(const std::string& type) const { typeInfo->type = type; }
+
+  const std::string& getTypeInfo() const { return typeInfo->type; }
 
 private:
+  struct TypeInfo {
+    std::string type = "UNTYPED";
+  };
+  std::unique_ptr<TypeInfo> typeInfo = std::make_unique<TypeInfo>();
   const std::string id;
   std::unique_ptr<TypeAST> type;
   Location location;
@@ -307,7 +321,7 @@ public:
 
   LiteralASTKind getKind() const { return kind; }
 
-  const Location& loc() { return location; }
+  const Location& loc() const { return location; }
 
   virtual void accept(ASTVisitor& visitor) const = 0;
 
@@ -447,6 +461,9 @@ public:
       : typedVar(std::move(typedVar)), literal(std::move(literal)) {}
   const TypedVarAST* getTypedVar() const { return typedVar.get(); }
   const LiteralAST* getLiteral() const { return literal.get(); }
+  virtual void accept(ASTVisitor& visitor) const {
+    visitor.visitVarDef(*this);
+  };
 
 private:
   std::unique_ptr<TypedVarAST> typedVar;
@@ -479,7 +496,7 @@ public:
 
   ExprASTKind getKind() const { return kind; }
 
-  const Location& loc() { return location; }
+  const Location& loc() const { return location; }
 
   virtual void accept(ASTVisitor& visitor) const = 0;
 

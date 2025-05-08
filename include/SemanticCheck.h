@@ -1,6 +1,8 @@
 #ifndef CHOCOPY_SEMANTIC_H
 #define CHOCOPY_SEMANTIC_H
 
+#include <algorithm>
+
 #include "AST.h"
 
 namespace chocopy {
@@ -26,8 +28,7 @@ public:
   ~SemanticCheckVisitor();
 
   std::vector<SemanticError> check(const ProgramAST& program);
-  std::vector<SemanticError>
-  checkInheritance(const ProgramAST& program);
+  std::vector<SemanticError> checkInheritance(const ProgramAST& program);
 
   void visitProgram(const ProgramAST& program) override;
   void visitClass(const ClassAST& clazz) override;
@@ -36,10 +37,16 @@ public:
   void visitLiteralFalse(const LiteralFalseAST& literalFalse) override;
   void visitLiteralString(const LiteralStringAST& literalString) override;
   void visitCallExpr(const CallExprAST& callExpr) override;
+  void visitVarDef(const VarDefAST& varDef) override;
+  void visitTypedVar(const TypedVarAST& typedVar) override;
 
 private:
+  bool isDefinedType(const llvm::StringRef typeName) {
+    return std::find(definedClassIds.begin(), definedClassIds.end(),
+                     typeName) != definedClassIds.end();
+  }
   std::vector<SemanticError> errors;
-  std::vector<std::string> definedClassIds = {"object"};
+  std::vector<std::string> definedClassIds = {"object", "str", "bool", "int"};
 };
 
 } // namespace chocopy

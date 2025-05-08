@@ -119,6 +119,10 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   builder->CreateCall(calleeFunc, args);
 }
 
+void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {}
+
+void LLVMCodeGenVisitor::visitTypedVar(const TypedVarAST& typedVar) {}
+
 void LLVMCodeGenVisitor::createBuiltinFuncDecl(
     const std::string& funcName, const std::string& returnType,
     const std::vector<std::string>& argTypes, bool isVarArg) const {
