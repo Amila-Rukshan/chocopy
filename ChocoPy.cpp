@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  chocopy::LLVMCodeGenVisitor codegen;
-  codegen.codeGen(*program, inputFilename);
+  chocopy::LLVMCodeGenVisitor codegen(program.get(), inputFilename);
+  codegen.codeGen();
   codegen.printLLVMBitCode(inputFilename.data());
 }

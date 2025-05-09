@@ -1,6 +1,7 @@
 #ifndef CHOCOPY_CODEGEN_H
 #define CHOCOPY_CODEGEN_H
 
+#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
@@ -11,12 +12,24 @@
 
 namespace chocopy {
 
+class VirtualTable {
+public:
+  VirtualTable(llvm::LLVMContext& context, const ClassAST* classAST)
+      : classAST(classAST), virtualTableStructType(llvm::StructType::create(
+                                context, classAST->getId().str() + "-vtbl")) {}
+  llvm::StructType* GetVTStructType() const { return virtualTableStructType; }
+
+private:
+  const ClassAST* classAST;
+  llvm::StructType* virtualTableStructType;
+};
+
 class LLVMCodeGenVisitor : public ASTVisitor {
 public:
-  LLVMCodeGenVisitor();
+  LLVMCodeGenVisitor(ProgramAST* program, llvm::StringRef programPath);
   ~LLVMCodeGenVisitor();
 
-  void codeGen(const ProgramAST& program, llvm::StringRef program_path);
+  void codeGen();
   void codeGenMainFunc(const std::vector<std::unique_ptr<StmtAST>>& stmts);
   void printLLVMBitCode(llvm::StringRef outputPath) const;
 
@@ -26,11 +39,10 @@ public:
   void visitLiteralTrue(const LiteralTrueAST& literalTrue) override;
   void visitLiteralFalse(const LiteralFalseAST& literalFalse) override;
   void visitLiteralString(const LiteralStringAST& literalString) override;
+  void visitLiteralNone(const LiteralNoneAST& literalNone) override;
   void visitCallExpr(const CallExprAST& callExpr) override;
   void visitVarDef(const VarDefAST& varDef) override;
   void visitTypedVar(const TypedVarAST& typedVar) override;
-
-  llvm::Type* llvmType(std::string typeName) const;
 
 private:
   void createBuiltinFuncDecl(const std::string& funcName,
@@ -43,9 +55,28 @@ private:
                              const std::vector<llvm::Type*>& llvmArgTypes,
                              bool isVarArg = false) const;
 
+  void createClassTypesAndVtableTypes(
+      const std::vector<std::unique_ptr<ClassAST>>& classDefs);
+  void addClassAttributes();
+  const VirtualTable& getVTable(const ClassAST* classPtr);
+
+  llvm::Type* llvmType(std::string typeName) const;
+  llvm::StructType* llvmClass(const std::string& className);
+  llvm::StructType* llvmClass(const ClassAST* classPtr);
+  const ClassAST* getClassByName(std::string name) const;
+  llvm::Type* llvmTypeOrClassPtrType(const std::string& typeName);
+
   std::unique_ptr<llvm::LLVMContext> context;
   std::unique_ptr<llvm::IRBuilder<>> builder;
   std::unique_ptr<llvm::Module> module;
+
+  ProgramAST* programAST;
+  ClassAST* currentClass;
+  FunctionAST* currentFunction;
+  llvm::StringRef programPath;
+
+  std::unordered_map<const ClassAST*, llvm::StructType*> classToStructType;
+  std::unordered_map<const ClassAST*, VirtualTable> classToVTable;
 };
 
 } // namespace chocopy

@@ -87,6 +87,9 @@ void SemanticCheckVisitor::visitLiteralFalse(
 void SemanticCheckVisitor::visitLiteralString(
     const LiteralStringAST& literalString) {}
 
+void SemanticCheckVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
+};
+
 void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {}
 
 void SemanticCheckVisitor::visitVarDef(const VarDefAST& varDef) {

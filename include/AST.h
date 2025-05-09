@@ -25,6 +25,7 @@ class LiteralNumberAST;
 class LiteralTrueAST;
 class LiteralFalseAST;
 class LiteralStringAST;
+class LiteralNoneAST;
 
 class CallExprAST;
 
@@ -40,6 +41,7 @@ public:
   virtual void visitLiteralTrue(const LiteralTrueAST& literalTrue) = 0;
   virtual void visitLiteralFalse(const LiteralFalseAST& literalFalse) = 0;
   virtual void visitLiteralString(const LiteralStringAST& literalString) = 0;
+  virtual void visitLiteralNone(const LiteralNoneAST& literalNone) = 0;
   virtual void visitCallExpr(const CallExprAST& callExpr) = 0;
   virtual void visitVarDef(const VarDefAST& varDef) = 0;
   virtual void visitTypedVar(const TypedVarAST& typedVar) = 0;
@@ -276,13 +278,13 @@ public:
   TypedVarAST(std::string id, Location location, std::unique_ptr<TypeAST> type)
       : id(std::move(id)), type(std::move(type)),
         location(std::move(location)) {}
-
+  
   const llvm::StringRef getId() const { return id; }
 
   const TypeAST* getType() const { return type.get(); }
   const Location& loc() const { return location; }
 
-  virtual void accept(ASTVisitor& visitor) const {
+  void accept(ASTVisitor& visitor) const {
     visitor.visitTypedVar(*this);
   };
 
@@ -351,7 +353,9 @@ public:
   LiteralNoneAST(Location location)
       : LiteralAST(LiteralAST::Literal_None, std::move(location)) {}
 
-  void accept(ASTVisitor& visitor) const override {}
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitLiteralNone(*this);
+  }
 
   /// LLVM style RTTI
   static bool classof(const LiteralAST* c) {

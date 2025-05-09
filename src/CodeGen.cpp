@@ -5,9 +5,11 @@
 
 namespace chocopy {
 
-LLVMCodeGenVisitor::LLVMCodeGenVisitor()
+LLVMCodeGenVisitor::LLVMCodeGenVisitor(ProgramAST* program,
+                                       llvm::StringRef programPath)
     : context(std::make_unique<llvm::LLVMContext>()),
-      builder(std::make_unique<llvm::IRBuilder<>>(*context)) {}
+      builder(std::make_unique<llvm::IRBuilder<>>(*context)),
+      programAST(program), programPath(programPath) {}
 
 LLVMCodeGenVisitor::~LLVMCodeGenVisitor() {}
 
@@ -21,20 +23,47 @@ void LLVMCodeGenVisitor::printLLVMBitCode(llvm::StringRef outputPath) const {
   module->print(dest, nullptr);
 }
 
-void LLVMCodeGenVisitor::codeGen(const chocopy::ProgramAST& program,
-                                 llvm::StringRef programPath) {
+const VirtualTable& LLVMCodeGenVisitor::getVTable(const ClassAST* classPtr) {
+  return classToVTable.at(classPtr);
+}
+
+void LLVMCodeGenVisitor::createClassTypesAndVtableTypes(
+    const std::vector<std::unique_ptr<ClassAST>>& classDefs) {
+  for (auto& clazz : classDefs) {
+    auto structType = llvm::StructType::create(*context, clazz->getId());
+    classToVTable.insert(
+        std::make_pair(clazz.get(), VirtualTable(*context, clazz.get())));
+
+    std::vector<llvm::Type*> elements;
+    // TODO: Add vtable ptr type
+    elements.push_back(llvm::PointerType::get(*context, 0));
+    structType->setBody(elements);
+    classToStructType.insert(std::make_pair(clazz.get(), structType));
+
+    llvm::GlobalVariable* dummy = new llvm::GlobalVariable(
+        *module, structType, false, llvm::GlobalValue::InternalLinkage, nullptr,
+        "dummy_" + clazz->getId());
+  }
+}
+
+void LLVMCodeGenVisitor::codeGen() {
   std::filesystem::path path(programPath.data());
   std::string fileName = path.filename().string();
 
   module = std::make_unique<llvm::Module>(fileName, *context);
 
+  createClassTypesAndVtableTypes(programAST->getClassDefs());
+
   /* Include external function declarations */
   createBuiltinFuncDecl("printf", "int", {"str"}, true);
 
-  program.accept(*this);
+  programAST->accept(*this);
 }
 
 void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
+  for (auto& globalVarDef : program.getVarDefs()) {
+    globalVarDef->accept(*this);
+  }
   codeGenMainFunc(program.getStmts());
 }
 
@@ -92,6 +121,11 @@ void LLVMCodeGenVisitor::visitLiteralString(
   literalString.setCodegenValue(stringPtr);
 }
 
+void LLVMCodeGenVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
+  llvm::Value* codegenValue = nullptr;
+  literalNone.setCodegenValue(codegenValue);
+}
+
 void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   for (auto& arg : callExpr.getArgs()) {
     arg->accept(*this);
@@ -119,7 +153,23 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   builder->CreateCall(calleeFunc, args);
 }
 
-void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {}
+void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
+  varDef.getLiteral()->accept(*this);
+  if (currentClass != nullptr) {
+    if (currentFunction == nullptr) {
+      // class var def (struct member)
+    } else {
+      // class method var def (stack var)
+    }
+  } else {
+    if (currentFunction == nullptr) {
+      // global var def
+
+    } else {
+      // global function var def
+    }
+  }
+}
 
 void LLVMCodeGenVisitor::visitTypedVar(const TypedVarAST& typedVar) {}
 
@@ -157,6 +207,30 @@ llvm::Type* LLVMCodeGenVisitor::llvmType(std::string typeName) const {
   if (typeName == "bool")
     return llvm::Type::getInt1Ty(*context);
   return nullptr;
+}
+
+llvm::Type*
+LLVMCodeGenVisitor::llvmTypeOrClassPtrType(const std::string& typeName) {
+  llvm::Type* type = llvmType(typeName);
+  if (type == nullptr) {
+    type = llvmClass(typeName)->getPointerTo();
+  }
+  return type;
+}
+
+llvm::StructType* LLVMCodeGenVisitor::llvmClass(const std::string& className) {
+  return llvmClass(getClassByName(className));
+}
+
+llvm::StructType* LLVMCodeGenVisitor::llvmClass(const ClassAST* classPtr) {
+  return classToStructType.at(classPtr);
+}
+
+const ClassAST* LLVMCodeGenVisitor::getClassByName(std::string name) const {
+  if (name == "self") {
+    name = currentClass->getId();
+  }
+  return programAST->GetClassPtr(name);
 }
 
 } // namespace chocopy

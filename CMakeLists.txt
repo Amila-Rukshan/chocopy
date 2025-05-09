@@ -36,11 +36,19 @@ include_directories(include/)
 
 add_executable(chocopyc
   ChocoPy.cpp
-  src/CodeGen.cpp)
+  src/CodeGen.cpp
+  src/SemanticCheck.cpp)
 
 target_link_libraries(chocopyc
   PRIVATE
-  MLIRSupport)
+  MLIRSupport
+  # LLVMCore
+  # LLVMSupport
+  # LLVMObject
+  # LLVMExecutionEngine
+  # LLVMOrcJIT
+  # LLVMTargetParser
+)
 
 option(ENABLE_TESTS "Enable unit tests" OFF)
 
