@@ -787,7 +787,7 @@ def baz():
   EXPECT_EQ(funcDef2->getBody().size(), 1);
   EXPECT_EQ(funcDef2->getArgs().size(), 0);
   EXPECT_EQ(funcDef2->getFuncDefs().size(), 0);
-  EXPECT_EQ(funcDef2->getReturnType(), nullptr);
+  EXPECT_EQ(funcDef2->getReturnType()->getTypeName(), "<None>");
 }
 
 TEST(ParserTest, TestClassWithPassBody) {

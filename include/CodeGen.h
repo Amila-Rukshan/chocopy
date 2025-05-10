@@ -18,10 +18,15 @@ public:
       : classAST(classAST), virtualTableStructType(llvm::StructType::create(
                                 context, classAST->getId().str() + "-vtbl")) {}
   llvm::StructType* GetVTStructType() const { return virtualTableStructType; }
+  void createVTable(llvm::Module* module,
+                    const std::vector<llvm::Constant*>& vtableFuncs);
+  const std::vector<llvm::Constant*>& getFuncs() const;
 
 private:
   const ClassAST* classAST;
   llvm::StructType* virtualTableStructType;
+  llvm::GlobalValue* globalVTableVal = nullptr;
+  std::vector<llvm::Constant*> funcs;
 };
 
 class LLVMCodeGenVisitor : public ASTVisitor {
@@ -59,12 +64,16 @@ private:
       const std::vector<std::unique_ptr<ClassAST>>& classDefs);
   void addClassAttributes();
   const VirtualTable& getVTable(const ClassAST* classPtr);
+  const VirtualTable& getVTable(const std::string& className);
 
   llvm::Type* llvmType(std::string typeName) const;
   llvm::StructType* llvmClass(const std::string& className);
   llvm::StructType* llvmClass(const ClassAST* classPtr);
   const ClassAST* getClassByName(std::string name) const;
   llvm::Type* llvmTypeOrClassPtrType(const std::string& typeName);
+  void addAttributes(const ClassAST* classPtr);
+  void addMethods(const ClassAST* classPtr);
+  std::string getRetTypeName(const TypeAST* type);
 
   std::unique_ptr<llvm::LLVMContext> context;
   std::unique_ptr<llvm::IRBuilder<>> builder;
@@ -77,6 +86,7 @@ private:
 
   std::unordered_map<const ClassAST*, llvm::StructType*> classToStructType;
   std::unordered_map<const ClassAST*, VirtualTable> classToVTable;
+  std::unordered_map<const FunctionAST*, llvm::Function*> functions;
 };
 
 } // namespace chocopy

@@ -208,9 +208,13 @@ public:
   TypeAST(TypeASTKind kind, Location location)
       : kind(kind), location(std::move(location)) {}
 
+  virtual ~TypeAST() = default;
+
   TypeASTKind getKind() const { return kind; }
 
   const Location& loc() const { return location; }
+
+  virtual std::string getTypeName() const = 0;
 
 private:
   const TypeASTKind kind;
@@ -223,6 +227,8 @@ public:
       : TypeAST(TypeAST::Type_Id, std::move(location)), id(std::move(id)) {}
 
   const llvm::StringRef getId() const { return id; }
+
+  std::string getTypeName() const override { return id; }
 
   /// LLVM style RTTI
   static bool classof(const TypeAST* c) {
@@ -246,6 +252,8 @@ public:
     return c->getKind() == TypeAST::Type_IdString;
   }
 
+  std::string getTypeName() const override { return id; }
+
 private:
   const std::string id;
 };
@@ -254,7 +262,9 @@ class ListTypeAST : public TypeAST {
 public:
   ListTypeAST(Location location, std::unique_ptr<TypeAST> type, int dimension)
       : TypeAST(TypeAST::Type_List, std::move(location)), type(std::move(type)),
-        dimension(dimension) {}
+        dimension(dimension), computedTypeName(this->type->getTypeName() +
+                                               std::string(dimension, '[') +
+                                               std::string(dimension, ']')) {}
 
   const TypeAST* getType() const { return type.get(); }
   int getDimension() const { return dimension; }
@@ -264,9 +274,12 @@ public:
     return c->getKind() == TypeAST::Type_List;
   }
 
+  std::string getTypeName() const override { return computedTypeName; }
+
 private:
   std::unique_ptr<TypeAST> type;
   int dimension = 0;
+  std::string computedTypeName;
 };
 
 /***********************************/
@@ -278,15 +291,13 @@ public:
   TypedVarAST(std::string id, Location location, std::unique_ptr<TypeAST> type)
       : id(std::move(id)), type(std::move(type)),
         location(std::move(location)) {}
-  
+
   const llvm::StringRef getId() const { return id; }
 
   const TypeAST* getType() const { return type.get(); }
   const Location& loc() const { return location; }
 
-  void accept(ASTVisitor& visitor) const {
-    visitor.visitTypedVar(*this);
-  };
+  void accept(ASTVisitor& visitor) const { visitor.visitTypedVar(*this); };
 
   void setTypeInfo(const std::string& type) const { typeInfo->type = type; }
 
@@ -465,9 +476,7 @@ public:
       : typedVar(std::move(typedVar)), literal(std::move(literal)) {}
   const TypedVarAST* getTypedVar() const { return typedVar.get(); }
   const LiteralAST* getLiteral() const { return literal.get(); }
-  virtual void accept(ASTVisitor& visitor) const {
-    visitor.visitVarDef(*this);
-  };
+  void accept(ASTVisitor& visitor) const { visitor.visitVarDef(*this); };
 
 private:
   std::unique_ptr<TypedVarAST> typedVar;

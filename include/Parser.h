@@ -153,6 +153,9 @@ private:
       returnType = parseType();
       lexer.getNextToken();
       lexer.consume(TokenKind::kColon);
+    } else {
+      returnType =
+          std::make_unique<IdTypeAST>(lexer.getLastLocation(), "<None>");
     }
 
     lexer.consume(TokenKind::kNewLine);

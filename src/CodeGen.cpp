@@ -27,22 +27,18 @@ const VirtualTable& LLVMCodeGenVisitor::getVTable(const ClassAST* classPtr) {
   return classToVTable.at(classPtr);
 }
 
+const VirtualTable&
+LLVMCodeGenVisitor::getVTable(const std::string& className) {
+  return getVTable(getClassByName(className));
+}
+
 void LLVMCodeGenVisitor::createClassTypesAndVtableTypes(
     const std::vector<std::unique_ptr<ClassAST>>& classDefs) {
   for (auto& clazz : classDefs) {
-    auto structType = llvm::StructType::create(*context, clazz->getId());
     classToVTable.insert(
         std::make_pair(clazz.get(), VirtualTable(*context, clazz.get())));
-
-    std::vector<llvm::Type*> elements;
-    // TODO: Add vtable ptr type
-    elements.push_back(llvm::PointerType::get(*context, 0));
-    structType->setBody(elements);
-    classToStructType.insert(std::make_pair(clazz.get(), structType));
-
-    llvm::GlobalVariable* dummy = new llvm::GlobalVariable(
-        *module, structType, false, llvm::GlobalValue::InternalLinkage, nullptr,
-        "dummy_" + clazz->getId());
+    classToStructType.insert(std::make_pair(
+        clazz.get(), llvm::StructType::create(*context, clazz->getId())));
   }
 }
 
@@ -55,7 +51,8 @@ void LLVMCodeGenVisitor::codeGen() {
   createClassTypesAndVtableTypes(programAST->getClassDefs());
 
   /* Include external function declarations */
-  createBuiltinFuncDecl("printf", "int", {"str"}, true);
+  createBuiltinFuncDecl("printf", "int", {"str"});
+  createBuiltinFuncDecl("malloc", "str", {"int"});
 
   programAST->accept(*this);
 }
@@ -64,7 +61,63 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
   for (auto& globalVarDef : program.getVarDefs()) {
     globalVarDef->accept(*this);
   }
+
+  for (auto& clazz : program.getClassDefs()) {
+    currentClass = clazz.get();
+    // add attributes and methods
+    addAttributes(clazz.get());
+    addMethods(clazz.get());
+
+    // TODO: remove temp
+    llvm::GlobalVariable* dummy = new llvm::GlobalVariable(
+        *module, llvmClass(clazz.get()), false,
+        llvm::GlobalValue::InternalLinkage, nullptr, "dummy_" + clazz->getId());
+  }
+
   codeGenMainFunc(program.getStmts());
+}
+
+void LLVMCodeGenVisitor::addAttributes(const ClassAST* classPtr) {
+  std::vector<llvm::Type*> attributeTypes;
+  // Add vtable ptr as the first thing in any class type
+  attributeTypes.push_back(
+      getVTable(classPtr).GetVTStructType()->getPointerTo());
+
+  // TODO: Add inherited and class attributes
+
+  classToStructType.at(classPtr)->setBody(attributeTypes);
+}
+
+void LLVMCodeGenVisitor::addMethods(const ClassAST* classPtr) {
+  std::vector<llvm::Constant*> vtableFuns;
+
+  if (classPtr->getSuperClassId().str() != "object") {
+    const std::vector<llvm::Constant*>& superClassVTableFuncs =
+        getVTable(classPtr->getSuperClassId().str()).getFuncs();
+
+    vtableFuns.insert(vtableFuns.end(), superClassVTableFuncs.begin(),
+                      superClassVTableFuncs.end());
+  }
+
+  for (const auto& methodDef : classPtr->getMethodDefs()) {
+    llvm::Type* retType =
+        llvmTypeOrClassPtrType(methodDef->getReturnType()->getTypeName());
+
+    std::vector<llvm::Type*> argTypes;
+    for (const auto& arg : methodDef->getArgs()) {
+      argTypes.push_back(llvmTypeOrClassPtrType(arg->getType()->getTypeName()));
+    }
+
+    std::string funcName =
+        classPtr->getId().str() + "-" + methodDef->getId().str();
+    llvm::FunctionType* funcType =
+        llvm::FunctionType::get(retType, argTypes, false);
+    llvm::Function* func = llvm::Function::Create(
+        funcType, llvm::Function::ExternalLinkage, funcName, *module);
+
+    functions[methodDef.get()] = func;
+    // TODO: Add new methods and overriden methods for this class
+  }
 }
 
 void LLVMCodeGenVisitor::visitClass(const ClassAST& clazz) {}
@@ -181,13 +234,7 @@ void LLVMCodeGenVisitor::createBuiltinFuncDecl(
     llvmArgTypes.push_back(llvmType(arg));
   }
 
-  llvm::Type* llvmReturnType;
-  if (returnType == "<None>") {
-    llvmReturnType = builder->getVoidTy();
-  } else {
-    llvmReturnType = llvmType(returnType);
-  }
-
+  llvm::Type* llvmReturnType = llvmType(returnType);
   createBuiltinFuncDecl(funcName, llvmReturnType, llvmArgTypes, isVarArg);
 }
 
@@ -200,6 +247,8 @@ void LLVMCodeGenVisitor::createBuiltinFuncDecl(
 }
 
 llvm::Type* LLVMCodeGenVisitor::llvmType(std::string typeName) const {
+  if (typeName == "<None>")
+    return builder->getVoidTy();
   if (typeName == "int")
     return llvm::Type::getInt32Ty(*context);
   if (typeName == "str")
@@ -231,6 +280,37 @@ const ClassAST* LLVMCodeGenVisitor::getClassByName(std::string name) const {
     name = currentClass->getId();
   }
   return programAST->GetClassPtr(name);
+}
+
+/***********************************/
+/* VirtualTable                    */
+/***********************************/
+
+void VirtualTable::createVTable(
+    llvm::Module* module, const std::vector<llvm::Constant*>& vtableFuncs) {
+
+  std::vector<llvm::Type*> vtableMethodTypes;
+  vtableMethodTypes.reserve(vtableFuncs.size());
+
+  for (auto fn : vtableFuncs)
+    vtableMethodTypes.push_back(fn->getType());
+
+  virtualTableStructType->setBody(vtableMethodTypes);
+
+  module->getOrInsertGlobal(classAST->getId().str() + "-vtbl.chocopy",
+                            virtualTableStructType);
+
+  llvm::GlobalVariable* vtableVar = new llvm::GlobalVariable(
+      *module, virtualTableStructType, true, llvm::GlobalValue::ExternalLinkage,
+      llvm::ConstantStruct::get(virtualTableStructType, vtableFuncs),
+      classAST->getId().str() + "-vtbl.chocopy");
+
+  funcs = vtableFuncs;
+  globalVTableVal = vtableVar;
+}
+
+const std::vector<llvm::Constant*>& VirtualTable::getFuncs() const {
+  return funcs;
 }
 
 } // namespace chocopy
