@@ -74,6 +74,10 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
         llvm::GlobalValue::InternalLinkage, nullptr, "dummy_" + clazz->getId());
   }
 
+  for (auto& clazz : program.getClassDefs()) {
+    clazz->accept(*this);
+  }
+
   codeGenMainFunc(program.getStmts());
 }
 
@@ -89,15 +93,17 @@ void LLVMCodeGenVisitor::addAttributes(const ClassAST* classPtr) {
 }
 
 void LLVMCodeGenVisitor::addMethods(const ClassAST* classPtr) {
-  std::vector<llvm::Constant*> vtableFuns;
+  std::vector<llvm::Constant*> vtableFuncs;
 
   if (classPtr->getSuperClassId().str() != "object") {
     const std::vector<llvm::Constant*>& superClassVTableFuncs =
         getVTable(classPtr->getSuperClassId().str()).getFuncs();
 
-    vtableFuns.insert(vtableFuns.end(), superClassVTableFuncs.begin(),
-                      superClassVTableFuncs.end());
+    vtableFuncs.insert(vtableFuncs.end(), superClassVTableFuncs.begin(),
+                       superClassVTableFuncs.end());
   }
+
+  size_t inheritedVTableSize = vtableFuncs.size();
 
   for (const auto& methodDef : classPtr->getMethodDefs()) {
     llvm::Type* retType =
@@ -116,11 +122,52 @@ void LLVMCodeGenVisitor::addMethods(const ClassAST* classPtr) {
         funcType, llvm::Function::ExternalLinkage, funcName, *module);
 
     functions[methodDef.get()] = func;
-    // TODO: Add new methods and overriden methods for this class
+    bool isOverride = false;
+    size_t vtableIndex = 0;
+
+    for (; vtableIndex < inheritedVTableSize; vtableIndex++) {
+      const auto& existingFunc = vtableFuncs[vtableIndex];
+      std::string existingName = existingFunc->getName().str();
+      size_t dashPos = existingName.find('-');
+      if (dashPos != std::string::npos) {
+        std::string existingMethodName = existingName.substr(dashPos + 1);
+        if (existingMethodName == methodDef->getId().str()) {
+          llvm::Function* existingFuncPtr =
+              llvm::dyn_cast<llvm::Function>(existingFunc);
+          if (existingFuncPtr &&
+              existingFuncPtr->getFunctionType() == funcType) {
+            isOverride = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (isOverride) {
+      vtableFuncs[vtableIndex] = func;
+    } else {
+      vtableFuncs.push_back(func);
+    }
+  }
+  classToVTable.at(classPtr).createVTable(module.get(), vtableFuncs);
+}
+
+void LLVMCodeGenVisitor::visitClass(const ClassAST& clazz) {
+  for (const auto& func : clazz.getMethodDefs()) {
+    func->accept(*this);
   }
 }
 
-void LLVMCodeGenVisitor::visitClass(const ClassAST& clazz) {}
+void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
+  llvm::Function* llvmFunction = llvmFunc(&func);
+
+  llvm::BasicBlock* entry =
+      llvm::BasicBlock::Create(*context, "entrypoint", llvmFunction);
+  builder->SetInsertPoint(entry);
+
+  for (const auto& stmt : func.getBody()) {
+  }
+};
 
 void LLVMCodeGenVisitor::codeGenMainFunc(
     const std::vector<std::unique_ptr<StmtAST>>& stmts) {
@@ -267,11 +314,13 @@ LLVMCodeGenVisitor::llvmTypeOrClassPtrType(const std::string& typeName) {
   return type;
 }
 
-llvm::StructType* LLVMCodeGenVisitor::llvmClass(const std::string& className) {
+inline llvm::StructType*
+LLVMCodeGenVisitor::llvmClass(const std::string& className) {
   return llvmClass(getClassByName(className));
 }
 
-llvm::StructType* LLVMCodeGenVisitor::llvmClass(const ClassAST* classPtr) {
+inline llvm::StructType*
+LLVMCodeGenVisitor::llvmClass(const ClassAST* classPtr) {
   return classToStructType.at(classPtr);
 }
 
@@ -280,6 +329,11 @@ const ClassAST* LLVMCodeGenVisitor::getClassByName(std::string name) const {
     name = currentClass->getId();
   }
   return programAST->GetClassPtr(name);
+}
+
+inline llvm::Function*
+LLVMCodeGenVisitor::llvmFunc(const FunctionAST* function) {
+  return functions.at(function);
 }
 
 /***********************************/

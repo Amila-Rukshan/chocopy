@@ -75,6 +75,8 @@ void SemanticCheckVisitor::visitProgram(const ProgramAST& program) {
 
 void SemanticCheckVisitor::visitClass(const ClassAST& clazz) {}
 
+void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {};
+
 void SemanticCheckVisitor::visitLiteralNumber(
     const LiteralNumberAST& literalNumber) {}
 

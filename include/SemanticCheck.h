@@ -32,6 +32,7 @@ public:
 
   void visitProgram(const ProgramAST& program) override;
   void visitClass(const ClassAST& clazz) override;
+  void visitFunction(const FunctionAST& func) override;
   void visitLiteralNumber(const LiteralNumberAST& literalNumber) override;
   void visitLiteralTrue(const LiteralTrueAST& literalTrue) override;
   void visitLiteralFalse(const LiteralFalseAST& literalFalse) override;

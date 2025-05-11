@@ -36,6 +36,7 @@ public:
   virtual void visitProgram(const ProgramAST& program) = 0;
 
   virtual void visitClass(const ClassAST& clazz) = 0;
+  virtual void visitFunction(const FunctionAST& func) = 0;
 
   virtual void visitLiteralNumber(const LiteralNumberAST& literalNumber) = 0;
   virtual void visitLiteralTrue(const LiteralTrueAST& literalTrue) = 0;
@@ -185,6 +186,8 @@ public:
     return funcDefs;
   }
   const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
+
+  void accept(ASTVisitor& visitor) const { visitor.visitFunction(*this); };
 
 private:
   Location location;
