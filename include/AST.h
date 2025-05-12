@@ -29,6 +29,8 @@ class LiteralNoneAST;
 
 class CallExprAST;
 
+class SimpleStmtAssignAST;
+
 class ASTVisitor {
 public:
   virtual ~ASTVisitor() = default;
@@ -46,6 +48,9 @@ public:
   virtual void visitCallExpr(const CallExprAST& callExpr) = 0;
   virtual void visitVarDef(const VarDefAST& varDef) = 0;
   virtual void visitTypedVar(const TypedVarAST& typedVar) = 0;
+
+  virtual void
+  visitSimpleStmtAssign(const SimpleStmtAssignAST& simpleStmtAssign) = 0;
 };
 
 /***********************************/
@@ -929,7 +934,9 @@ public:
 
   const ExprAST* getRhs() const { return rhs.get(); }
 
-  void accept(ASTVisitor& visitor) const override {}
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitSimpleStmtAssign(*this);
+  }
 
   /// LLVM style RTTI
   static bool classof(const SimpleStmtAST* c) {

@@ -1,6 +1,8 @@
 #ifndef CHOCOPY_CODEGEN_H
 #define CHOCOPY_CODEGEN_H
 
+#include <map>
+
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
@@ -50,6 +52,9 @@ public:
   void visitVarDef(const VarDefAST& varDef) override;
   void visitTypedVar(const TypedVarAST& typedVar) override;
 
+  void
+  visitSimpleStmtAssign(const SimpleStmtAssignAST& simpleStmtAssign) override;
+
 private:
   void createBuiltinFuncDecl(const std::string& funcName,
                              const std::string& returnType,
@@ -75,8 +80,9 @@ private:
   void addAttributes(const ClassAST* classPtr);
   void addMethods(const ClassAST* classPtr);
   std::string getRetTypeName(const TypeAST* type);
-
+  llvm::Constant* llvmDefaultValue(const std::string& typeName);
   llvm::Function* llvmFunc(const FunctionAST* function);
+  llvm::Value* lookupVariable(const std::string& varName);
 
   std::unique_ptr<llvm::LLVMContext> context;
   std::unique_ptr<llvm::IRBuilder<>> builder;
@@ -90,6 +96,7 @@ private:
   std::unordered_map<const ClassAST*, llvm::StructType*> classToStructType;
   std::unordered_map<const ClassAST*, VirtualTable> classToVTable;
   std::unordered_map<const FunctionAST*, llvm::Function*> functions;
+  std::map<llvm::StringRef, llvm::GlobalVariable*> globalVariables;
 };
 
 } // namespace chocopy

@@ -42,6 +42,9 @@ public:
   void visitVarDef(const VarDefAST& varDef) override;
   void visitTypedVar(const TypedVarAST& typedVar) override;
 
+  void
+  visitSimpleStmtAssign(const SimpleStmtAssignAST& simpleStmtAssign) override;
+
 private:
   bool isDefinedType(const llvm::StringRef typeName) {
     return std::find(definedClassIds.begin(), definedClassIds.end(),

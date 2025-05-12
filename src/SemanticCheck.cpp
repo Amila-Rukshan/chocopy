@@ -162,4 +162,7 @@ void SemanticCheckVisitor::visitTypedVar(const TypedVarAST& typedVar) {
   assert(listTypeAST == nullptr && "List type is not implemented yet");
 }
 
+void SemanticCheckVisitor::visitSimpleStmtAssign(
+    const SimpleStmtAssignAST& simpleStmtAssign) {}
+
 } // namespace chocopy

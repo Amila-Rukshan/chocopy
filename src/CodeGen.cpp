@@ -47,6 +47,7 @@ void LLVMCodeGenVisitor::codeGen() {
   std::string fileName = path.filename().string();
 
   module = std::make_unique<llvm::Module>(fileName, *context);
+  module->setTargetTriple("x86_64-pc-linux-gnu");
 
   createClassTypesAndVtableTypes(programAST->getClassDefs());
 
@@ -68,10 +69,11 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
     addAttributes(clazz.get());
     addMethods(clazz.get());
 
-    // TODO: remove temp
-    llvm::GlobalVariable* dummy = new llvm::GlobalVariable(
-        *module, llvmClass(clazz.get()), false,
-        llvm::GlobalValue::InternalLinkage, nullptr, "dummy_" + clazz->getId());
+    // // TODO: remove temp
+    // llvm::GlobalVariable* dummy = new llvm::GlobalVariable(
+    //     *module, llvmClass(clazz.get()), false,
+    //     llvm::GlobalValue::InternalLinkage, nullptr, "dummy_" +
+    //     clazz->getId());
   }
 
   for (auto& clazz : program.getClassDefs()) {
@@ -166,7 +168,10 @@ void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
   builder->SetInsertPoint(entry);
 
   for (const auto& stmt : func.getBody()) {
+    stmt->accept(*this);
   }
+
+  builder->CreateRet(llvmDefaultValue(func.getReturnType()->getTypeName()));
 };
 
 void LLVMCodeGenVisitor::codeGenMainFunc(
@@ -231,6 +236,7 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
     arg->accept(*this);
   }
   llvm::Function* calleeFunc = nullptr;
+  bool isConstructorCall = false;
   if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
     if (callee->getId() == "print") {
       calleeFunc = module->getFunction("printf");
@@ -238,7 +244,22 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
         llvm::errs() << "Unknown function referenced 'printf'\n";
         return;
       }
+    } else if (auto structTypePtr = llvmClass(callee->getId().str())) {
+      isConstructorCall = true;
+      size_t structSize = module->getDataLayout().getTypeAllocSize(
+          llvmClass(callee->getId().str()));
+      llvm::Value* mallocSize =
+          llvm::ConstantInt::get(*context, llvm::APInt(32, structSize));
+      calleeFunc = module->getFunction("malloc");
+      llvm::Value* mallocCall = builder->CreateCall(calleeFunc, mallocSize);
+      llvm::Value* bitcast = builder->CreateBitCast(
+          mallocCall, llvmClass(callee->getId().str())->getPointerTo());
+      callExpr.setCodegenValue(bitcast);
     }
+  }
+  if (isConstructorCall) {
+    // TODO: create constructor functions (to initialize attributes) and call it
+    return;
   }
   assert(calleeFunc && "Function could not be found");
   std::vector<llvm::Value*> args;
@@ -264,11 +285,36 @@ void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
   } else {
     if (currentFunction == nullptr) {
       // global var def
+      const std::string typeName =
+          varDef.getTypedVar()->getType()->getTypeName();
+      llvm::Type* varType = llvmTypeOrClassPtrType(typeName);
+      llvm::Constant* defaultValue = llvmDefaultValue(typeName);
+      llvm::GlobalVariable* globalVar = new llvm::GlobalVariable(
+          *module, varType, false, llvm::GlobalValue::ExternalLinkage,
+          defaultValue, varDef.getTypedVar()->getId().str());
 
+      globalVariables[varDef.getTypedVar()->getId().str()] = globalVar;
     } else {
       // global function var def
     }
   }
+}
+
+void LLVMCodeGenVisitor::visitSimpleStmtAssign(
+    const SimpleStmtAssignAST& simpleStmtAssign) {
+  simpleStmtAssign.getRhs()->accept(*this);
+  llvm::Value* rhsValue = simpleStmtAssign.getRhs()->getCodegenValue();
+  for (const auto& varTarget : simpleStmtAssign.getTargets()) {
+    if (auto idExpr = llvm::dyn_cast<IdExprAST>(varTarget.get())) {
+      // TODO: lookup has a issue
+      llvm::Value* var = lookupVariable(idExpr->getId().str());
+      builder->CreateStore(rhsValue, var);
+    }
+  }
+}
+
+llvm::Value* LLVMCodeGenVisitor::lookupVariable(const std::string& varName) {
+  return globalVariables[varName];
 }
 
 void LLVMCodeGenVisitor::visitTypedVar(const TypedVarAST& typedVar) {}
@@ -303,6 +349,20 @@ llvm::Type* LLVMCodeGenVisitor::llvmType(std::string typeName) const {
   if (typeName == "bool")
     return llvm::Type::getInt1Ty(*context);
   return nullptr;
+}
+
+llvm::Constant*
+LLVMCodeGenVisitor::llvmDefaultValue(const std::string& typeName) {
+  if (typeName == "<None>")
+    return nullptr;
+  if (typeName == "int")
+    return llvm::ConstantInt::get(*context, llvm::APInt(64, 0));
+  if (typeName == "str")
+    return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(*context));
+  if (typeName == "bool")
+    return llvm::ConstantInt::getFalse(*context);
+  return llvm::ConstantPointerNull::get(
+      llvmTypeOrClassPtrType(typeName)->getPointerTo());
 }
 
 llvm::Type*
