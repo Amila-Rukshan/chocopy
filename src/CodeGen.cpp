@@ -225,6 +225,8 @@ void LLVMCodeGenVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
   literalNone.setCodegenValue(codegenValue);
 }
 
+void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {}
+
 void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   for (auto& arg : callExpr.getArgs()) {
     arg->accept(*this);
@@ -309,6 +311,9 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
     }
   }
 }
+
+void LLVMCodeGenVisitor::visitSimpleStmtExpr(
+    const SimpleStmtExprAST& simpleStmtExpr) {}
 
 llvm::Value* LLVMCodeGenVisitor::lookupVariable(llvm::StringRef varName) {
   return globalVariables[varName];

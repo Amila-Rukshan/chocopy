@@ -94,6 +94,8 @@ void SemanticCheckVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
 
 void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {}
 
+void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {}
+
 void SemanticCheckVisitor::visitVarDef(const VarDefAST& varDef) {
   varDef.getTypedVar()->accept(*this);
   auto type = varDef.getTypedVar()->getTypeInfo();
@@ -164,5 +166,8 @@ void SemanticCheckVisitor::visitTypedVar(const TypedVarAST& typedVar) {
 
 void SemanticCheckVisitor::visitSimpleStmtAssign(
     const SimpleStmtAssignAST& simpleStmtAssign) {}
+
+void SemanticCheckVisitor::visitSimpleStmtExpr(
+    const SimpleStmtExprAST& simpleStmtExpr) {}
 
 } // namespace chocopy

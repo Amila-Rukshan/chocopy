@@ -28,8 +28,10 @@ class LiteralStringAST;
 class LiteralNoneAST;
 
 class CallExprAST;
+class BinaryExprAST;
 
 class SimpleStmtAssignAST;
+class SimpleStmtExprAST;
 
 class ASTVisitor {
 public:
@@ -46,11 +48,13 @@ public:
   virtual void visitLiteralString(const LiteralStringAST& literalString) = 0;
   virtual void visitLiteralNone(const LiteralNoneAST& literalNone) = 0;
   virtual void visitCallExpr(const CallExprAST& callExpr) = 0;
+  virtual void visitBinaryExpr(const BinaryExprAST& binaryExpr) = 0;
   virtual void visitVarDef(const VarDefAST& varDef) = 0;
   virtual void visitTypedVar(const TypedVarAST& typedVar) = 0;
 
   virtual void
   visitSimpleStmtAssign(const SimpleStmtAssignAST& simpleStmtAssign) = 0;
+  virtual void visitSimpleStmtExpr(const SimpleStmtExprAST& simpleStmtExpr) = 0;
 };
 
 /***********************************/
@@ -709,7 +713,9 @@ public:
   const ExprAST* getRhs() const { return rhs.get(); }
   TokenKind getOp() const { return op; }
 
-  void accept(ASTVisitor& visitor) const override {}
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitBinaryExpr(*this);
+  }
 
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {

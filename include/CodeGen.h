@@ -34,11 +34,14 @@ public:
   void visitLiteralString(const LiteralStringAST& literalString) override;
   void visitLiteralNone(const LiteralNoneAST& literalNone) override;
   void visitCallExpr(const CallExprAST& callExpr) override;
+  void visitBinaryExpr(const BinaryExprAST& binaryExpr) override;
   void visitVarDef(const VarDefAST& varDef) override;
   void visitTypedVar(const TypedVarAST& typedVar) override;
 
   void
   visitSimpleStmtAssign(const SimpleStmtAssignAST& simpleStmtAssign) override;
+  void 
+  visitSimpleStmtExpr(const SimpleStmtExprAST& simpleStmtExpr) override;
 
 private:
   void createBuiltinFuncDecl(const std::string& funcName,
