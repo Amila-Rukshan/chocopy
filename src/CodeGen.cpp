@@ -68,12 +68,6 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
     // add attributes and methods
     addAttributes(clazz.get());
     addMethods(clazz.get());
-
-    // // TODO: remove temp
-    // llvm::GlobalVariable* dummy = new llvm::GlobalVariable(
-    //     *module, llvmClass(clazz.get()), false,
-    //     llvm::GlobalValue::InternalLinkage, nullptr, "dummy_" +
-    //     clazz->getId());
   }
 
   for (auto& clazz : program.getClassDefs()) {
@@ -244,7 +238,7 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
         llvm::errs() << "Unknown function referenced 'printf'\n";
         return;
       }
-    } else if (auto structTypePtr = llvmClass(callee->getId().str())) {
+    } else if (auto classPtr = getClassByName(callee->getId().str())) {
       isConstructorCall = true;
       size_t structSize = module->getDataLayout().getTypeAllocSize(
           llvmClass(callee->getId().str()));
@@ -254,6 +248,10 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
       llvm::Value* mallocCall = builder->CreateCall(calleeFunc, mallocSize);
       llvm::Value* bitcast = builder->CreateBitCast(
           mallocCall, llvmClass(callee->getId().str())->getPointerTo());
+
+      llvm::Value* vtablePtr = classToVTable.at(classPtr).getGlobalVTableVal();
+      builder->CreateStore(vtablePtr, bitcast);
+
       callExpr.setCodegenValue(bitcast);
     }
   }
@@ -293,7 +291,7 @@ void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
           *module, varType, false, llvm::GlobalValue::ExternalLinkage,
           defaultValue, varDef.getTypedVar()->getId().str());
 
-      globalVariables[varDef.getTypedVar()->getId().str()] = globalVar;
+      globalVariables[varDef.getTypedVar()->getId()] = globalVar;
     } else {
       // global function var def
     }
@@ -306,14 +304,13 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
   llvm::Value* rhsValue = simpleStmtAssign.getRhs()->getCodegenValue();
   for (const auto& varTarget : simpleStmtAssign.getTargets()) {
     if (auto idExpr = llvm::dyn_cast<IdExprAST>(varTarget.get())) {
-      // TODO: lookup has a issue
-      llvm::Value* var = lookupVariable(idExpr->getId().str());
+      llvm::Value* var = lookupVariable(idExpr->getId());
       builder->CreateStore(rhsValue, var);
     }
   }
 }
 
-llvm::Value* LLVMCodeGenVisitor::lookupVariable(const std::string& varName) {
+llvm::Value* LLVMCodeGenVisitor::lookupVariable(llvm::StringRef varName) {
   return globalVariables[varName];
 }
 
@@ -425,6 +422,10 @@ void VirtualTable::createVTable(
 
 const std::vector<llvm::Constant*>& VirtualTable::getFuncs() const {
   return funcs;
+}
+
+llvm::GlobalValue* VirtualTable::getGlobalVTableVal() const {
+  return globalVTableVal;
 }
 
 } // namespace chocopy

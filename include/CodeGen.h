@@ -14,22 +14,7 @@
 
 namespace chocopy {
 
-class VirtualTable {
-public:
-  VirtualTable(llvm::LLVMContext& context, const ClassAST* classAST)
-      : classAST(classAST), virtualTableStructType(llvm::StructType::create(
-                                context, classAST->getId().str() + "-vtbl")) {}
-  llvm::StructType* GetVTStructType() const { return virtualTableStructType; }
-  void createVTable(llvm::Module* module,
-                    const std::vector<llvm::Constant*>& vtableFuncs);
-  const std::vector<llvm::Constant*>& getFuncs() const;
-
-private:
-  const ClassAST* classAST;
-  llvm::StructType* virtualTableStructType;
-  llvm::GlobalValue* globalVTableVal = nullptr;
-  std::vector<llvm::Constant*> funcs;
-};
+class VirtualTable;
 
 class LLVMCodeGenVisitor : public ASTVisitor {
 public:
@@ -82,21 +67,39 @@ private:
   std::string getRetTypeName(const TypeAST* type);
   llvm::Constant* llvmDefaultValue(const std::string& typeName);
   llvm::Function* llvmFunc(const FunctionAST* function);
-  llvm::Value* lookupVariable(const std::string& varName);
+  llvm::Value* lookupVariable(llvm::StringRef varName);
 
   std::unique_ptr<llvm::LLVMContext> context;
   std::unique_ptr<llvm::IRBuilder<>> builder;
   std::unique_ptr<llvm::Module> module;
 
-  ProgramAST* programAST;
-  ClassAST* currentClass;
-  FunctionAST* currentFunction;
+  ProgramAST* programAST = nullptr;
+  ClassAST* currentClass = nullptr;
+  FunctionAST* currentFunction = nullptr;
   llvm::StringRef programPath;
 
   std::unordered_map<const ClassAST*, llvm::StructType*> classToStructType;
   std::unordered_map<const ClassAST*, VirtualTable> classToVTable;
   std::unordered_map<const FunctionAST*, llvm::Function*> functions;
   std::map<llvm::StringRef, llvm::GlobalVariable*> globalVariables;
+};
+
+class VirtualTable {
+public:
+  VirtualTable(llvm::LLVMContext& context, const ClassAST* classAST)
+      : classAST(classAST), virtualTableStructType(llvm::StructType::create(
+                                context, classAST->getId().str() + "-vtbl")) {}
+  llvm::StructType* GetVTStructType() const { return virtualTableStructType; }
+  void createVTable(llvm::Module* module,
+                    const std::vector<llvm::Constant*>& vtableFuncs);
+  const std::vector<llvm::Constant*>& getFuncs() const;
+  llvm::GlobalValue* getGlobalVTableVal() const;
+
+private:
+  const ClassAST* classAST;
+  llvm::StructType* virtualTableStructType;
+  llvm::GlobalValue* globalVTableVal = nullptr;
+  std::vector<llvm::Constant*> funcs;
 };
 
 } // namespace chocopy
