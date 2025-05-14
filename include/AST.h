@@ -29,6 +29,7 @@ class LiteralNoneAST;
 
 class CallExprAST;
 class BinaryExprAST;
+class IdExprAST;
 
 class SimpleStmtAssignAST;
 class SimpleStmtExprAST;
@@ -48,6 +49,7 @@ public:
   virtual void visitLiteralString(const LiteralStringAST& literalString) = 0;
   virtual void visitLiteralNone(const LiteralNoneAST& literalNone) = 0;
   virtual void visitCallExpr(const CallExprAST& callExpr) = 0;
+  virtual void visitIdExpr(const IdExprAST& idExpr) = 0;
   virtual void visitBinaryExpr(const BinaryExprAST& binaryExpr) = 0;
   virtual void visitVarDef(const VarDefAST& varDef) = 0;
   virtual void visitTypedVar(const TypedVarAST& typedVar) = 0;
@@ -551,7 +553,9 @@ public:
 
   const llvm::StringRef getId() const { return id; }
 
-  void accept(ASTVisitor& visitor) const override {}
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitIdExpr(*this);
+  }
 
   /// LLVM style RTTI
   static bool classof(const ExprAST* c) {

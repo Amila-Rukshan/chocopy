@@ -68,6 +68,8 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
     // add attributes and methods
     addAttributes(clazz.get());
     addMethods(clazz.get());
+
+    currentClass = nullptr;
   }
 
   for (auto& clazz : program.getClassDefs()) {
@@ -116,6 +118,8 @@ void LLVMCodeGenVisitor::addMethods(const ClassAST* classPtr) {
         llvm::FunctionType::get(retType, argTypes, false);
     llvm::Function* func = llvm::Function::Create(
         funcType, llvm::Function::ExternalLinkage, funcName, *module);
+
+    functionNameToFunc[funcName] = func;
 
     functions[methodDef.get()] = func;
     bool isOverride = false;
@@ -225,7 +229,63 @@ void LLVMCodeGenVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
   literalNone.setCodegenValue(codegenValue);
 }
 
-void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {}
+void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
+  switch (binaryExpr.getOp()) {
+  case TokenKind::kAttrAccessOp: {
+    if (auto rhs = llvm::dyn_cast<CallExprAST>(binaryExpr.getRhs())) {
+      binaryExpr.getLhs()->accept(*this);
+      std::string instanceType = binaryExpr.getLhs()->getTypeInfo();
+
+      llvm::Value* instancePtr = builder->CreateLoad(
+          getVTable(instanceType).GetVTStructType()->getPointerTo(),
+          binaryExpr.getLhs()->getCodegenValue(), "current_instance_ptr");
+
+      auto funcId = llvm::dyn_cast<IdExprAST>(rhs->getCallee())->getId().str();
+      std::string functionName = instanceType + "-" + funcId;
+      auto llvmFunc = functionNameToFunc[functionName];
+
+      size_t vTableIndex = getVTable(instanceType).getVTableIndex(llvmFunc);
+
+      for (const auto& arg : rhs->getArgs()) {
+        arg->accept(*this);
+      }
+
+      // first arg is always the instance ptr
+      std::vector<llvm::Value*> args = {instancePtr};
+      for (const auto& arg : rhs->getArgs()) {
+        llvm::Value* argVal = arg->getCodegenValue();
+        if (argVal == nullptr) {
+          llvm::errs() << "Unknown argument";
+          return;
+        }
+        args.push_back(argVal);
+      }
+
+      llvm::Value* vtablePtrPtr = builder->CreateStructGEP(
+          llvmClass(instanceType), instancePtr, 0, "vtable_ptr_ptr");
+      llvm::Value* vtablePtr = builder->CreateLoad(
+          getVTable(instanceType).GetVTStructType()->getPointerTo(),
+          vtablePtrPtr, "vtable_ptr");
+
+      llvm::Value* funcPtrAddr =
+          builder->CreateStructGEP(getVTable(instanceType).GetVTStructType(),
+                                   vtablePtr, vTableIndex, "func_ptr_addr");
+      llvm::Value* funcPtr =
+          builder->CreateLoad(llvmFunc->getType(), funcPtrAddr, "func_ptr");
+
+      llvm::FunctionType* funcType = llvmFunc->getFunctionType();
+      builder->CreateCall(funcType, funcPtr, args);
+    }
+    return;
+  }
+  }
+}
+
+void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
+  if (currentClass == nullptr && currentFunction == nullptr) {
+    idExpr.setCodegenValue(globalVariables[idExpr.getId()]);
+  }
+}
 
 void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   for (auto& arg : callExpr.getArgs()) {
@@ -431,6 +491,13 @@ const std::vector<llvm::Constant*>& VirtualTable::getFuncs() const {
 
 llvm::GlobalValue* VirtualTable::getGlobalVTableVal() const {
   return globalVTableVal;
+}
+
+size_t VirtualTable::getVTableIndex(llvm::Constant* llvmFunc) const {
+  auto it = std::find(funcs.begin(), funcs.end(), llvmFunc);
+  assert(it != funcs.end() && "Function not found in vtable!\n");
+  if (it != funcs.end())
+    return std::distance(funcs.begin(), it);
 }
 
 } // namespace chocopy

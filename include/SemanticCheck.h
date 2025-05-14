@@ -39,6 +39,7 @@ public:
   void visitLiteralString(const LiteralStringAST& literalString) override;
   void visitLiteralNone(const LiteralNoneAST& literalNone) override;
   void visitCallExpr(const CallExprAST& callExpr) override;
+  void visitIdExpr(const IdExprAST& idExpr) override;
   void visitBinaryExpr(const BinaryExprAST& binaryExpr) override;
   void visitVarDef(const VarDefAST& varDef) override;
   void visitTypedVar(const TypedVarAST& typedVar) override;
@@ -54,6 +55,11 @@ private:
   }
   std::vector<SemanticError> errors;
   std::vector<std::string> definedClassIds = {"object", "str", "bool", "int"};
+  std::unordered_map<std::string, std::string> globalVarToType;
+
+  ClassAST* currentClass = nullptr;
+  FunctionAST* currentFunction = nullptr;
+
 };
 
 } // namespace chocopy

@@ -71,6 +71,9 @@ void SemanticCheckVisitor::visitProgram(const ProgramAST& program) {
   for (auto& varDef : program.getVarDefs()) {
     varDef->accept(*this);
   }
+  for (auto& stmt : program.getStmts()) {
+    stmt->accept(*this);
+  }
 }
 
 void SemanticCheckVisitor::visitClass(const ClassAST& clazz) {}
@@ -94,7 +97,16 @@ void SemanticCheckVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
 
 void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {}
 
-void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {}
+void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
+  if (currentClass == nullptr && currentFunction == nullptr) {
+    idExpr.setTypeInfo(globalVarToType.at(idExpr.getId().str()));
+  }
+}
+
+void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
+  binaryExpr.getLhs()->accept(*this);
+  binaryExpr.getRhs()->accept(*this);
+}
 
 void SemanticCheckVisitor::visitVarDef(const VarDefAST& varDef) {
   varDef.getTypedVar()->accept(*this);
@@ -134,6 +146,10 @@ void SemanticCheckVisitor::visitVarDef(const VarDefAST& varDef) {
               varDef.getTypedVar()->getTypeInfo() +
               "' must be initialized with 'None' literal\n"));
     }
+  }
+  if (currentClass == nullptr && currentFunction == nullptr) {
+    globalVarToType[varDef.getTypedVar()->getId().str()] =
+        varDef.getTypedVar()->getTypeInfo();
   }
 }
 

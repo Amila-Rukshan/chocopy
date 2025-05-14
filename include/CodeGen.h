@@ -34,6 +34,7 @@ public:
   void visitLiteralString(const LiteralStringAST& literalString) override;
   void visitLiteralNone(const LiteralNoneAST& literalNone) override;
   void visitCallExpr(const CallExprAST& callExpr) override;
+  void visitIdExpr(const IdExprAST& idExpr) override;
   void visitBinaryExpr(const BinaryExprAST& binaryExpr) override;
   void visitVarDef(const VarDefAST& varDef) override;
   void visitTypedVar(const TypedVarAST& typedVar) override;
@@ -84,6 +85,7 @@ private:
   std::unordered_map<const ClassAST*, llvm::StructType*> classToStructType;
   std::unordered_map<const ClassAST*, VirtualTable> classToVTable;
   std::unordered_map<const FunctionAST*, llvm::Function*> functions;
+  std::unordered_map<std::string, llvm::Function*> functionNameToFunc;
   std::map<llvm::StringRef, llvm::GlobalVariable*> globalVariables;
 };
 
@@ -97,6 +99,7 @@ public:
                     const std::vector<llvm::Constant*>& vtableFuncs);
   const std::vector<llvm::Constant*>& getFuncs() const;
   llvm::GlobalValue* getGlobalVTableVal() const;
+  size_t getVTableIndex(llvm::Constant* llvmFunc) const;
 
 private:
   const ClassAST* classAST;
