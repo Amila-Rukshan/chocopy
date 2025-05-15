@@ -144,9 +144,6 @@ private:
     lexer.consume(TokenKind::kCloseParantheses);
 
     std::unique_ptr<TypeAST> returnType = nullptr;
-    if (lexer.getCurToken() == TokenKind::kColon) {
-      lexer.consume(TokenKind::kColon);
-    }
 
     if (lexer.getCurToken() == TokenKind::kArrow) {
       lexer.consume(TokenKind::kArrow);
@@ -156,6 +153,7 @@ private:
     } else {
       returnType =
           std::make_unique<IdTypeAST>(lexer.getLastLocation(), "<None>");
+      lexer.consume(TokenKind::kColon);
     }
 
     lexer.consume(TokenKind::kNewLine);

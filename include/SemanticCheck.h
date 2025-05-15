@@ -43,6 +43,8 @@ public:
   void visitBinaryExpr(const BinaryExprAST& binaryExpr) override;
   void visitVarDef(const VarDefAST& varDef) override;
   void visitTypedVar(const TypedVarAST& typedVar) override;
+  void
+  visitSimpleStmtReturn(const SimpleStmtReturnAST& simpleStmtReturn) override;
 
   void
   visitSimpleStmtAssign(const SimpleStmtAssignAST& simpleStmtAssign) override;
@@ -59,7 +61,6 @@ private:
 
   ClassAST* currentClass = nullptr;
   FunctionAST* currentFunction = nullptr;
-
 };
 
 } // namespace chocopy

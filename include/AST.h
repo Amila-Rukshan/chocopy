@@ -33,6 +33,7 @@ class IdExprAST;
 
 class SimpleStmtAssignAST;
 class SimpleStmtExprAST;
+class SimpleStmtReturnAST;
 
 class ASTVisitor {
 public:
@@ -57,6 +58,8 @@ public:
   virtual void
   visitSimpleStmtAssign(const SimpleStmtAssignAST& simpleStmtAssign) = 0;
   virtual void visitSimpleStmtExpr(const SimpleStmtExprAST& simpleStmtExpr) = 0;
+  virtual void
+  visitSimpleStmtReturn(const SimpleStmtReturnAST& simpleStmtReturn) = 0;
 };
 
 /***********************************/
@@ -919,7 +922,9 @@ public:
 
   const ExprAST* getExpr() const { return expr.get(); }
 
-  void accept(ASTVisitor& visitor) const override {}
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitSimpleStmtReturn(*this);
+  }
 
   /// LLVM style RTTI
   static bool classof(const SimpleStmtAST* c) {

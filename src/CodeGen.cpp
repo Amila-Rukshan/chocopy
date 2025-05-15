@@ -73,7 +73,9 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
   }
 
   for (auto& clazz : program.getClassDefs()) {
+    currentClass = const_cast<ClassAST*>(clazz.get());
     clazz->accept(*this);
+    currentClass = nullptr;
   }
 
   codeGenMainFunc(program.getStmts());
@@ -159,17 +161,31 @@ void LLVMCodeGenVisitor::visitClass(const ClassAST& clazz) {
 }
 
 void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
+  currentFunction = const_cast<FunctionAST*>(&func);
   llvm::Function* llvmFunction = llvmFunc(&func);
 
   llvm::BasicBlock* entry =
       llvm::BasicBlock::Create(*context, "entrypoint", llvmFunction);
   builder->SetInsertPoint(entry);
 
+  for (auto& param : llvmFunction->args()) {
+    int paramIndex = param.getArgNo();
+    llvm::Type* paramType =
+        llvmFunction->getFunctionType()->getParamType(paramIndex);
+    llvm::AllocaInst* alloca = builder->CreateAlloca(
+        paramType, nullptr, func.getArgs().at(paramIndex)->getId());
+    localVariables[func.getArgs().at(paramIndex)->getId()] = alloca;
+    builder->CreateStore(&param, alloca);
+  }
+
   for (const auto& stmt : func.getBody()) {
     stmt->accept(*this);
   }
 
-  builder->CreateRet(llvmDefaultValue(func.getReturnType()->getTypeName()));
+  if (!builder->GetInsertBlock()->getTerminator()) {
+    builder->CreateRet(llvmDefaultValue(func.getReturnType()->getTypeName()));
+  }
+  currentFunction = nullptr;
 };
 
 void LLVMCodeGenVisitor::codeGenMainFunc(
@@ -274,7 +290,8 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
           builder->CreateLoad(llvmFunc->getType(), funcPtrAddr, "func_ptr");
 
       llvm::FunctionType* funcType = llvmFunc->getFunctionType();
-      builder->CreateCall(funcType, funcPtr, args);
+      llvm::Value* val = builder->CreateCall(funcType, funcPtr, args);
+      binaryExpr.setCodegenValue(val);
     }
     return;
   }
@@ -284,6 +301,8 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
 void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
   if (currentClass == nullptr && currentFunction == nullptr) {
     idExpr.setCodegenValue(globalVariables[idExpr.getId()]);
+  } else if (currentClass != nullptr && currentFunction != nullptr) {
+    idExpr.setCodegenValue(localVariables[idExpr.getId()]);
   }
 }
 
@@ -374,6 +393,13 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
 
 void LLVMCodeGenVisitor::visitSimpleStmtExpr(
     const SimpleStmtExprAST& simpleStmtExpr) {}
+
+void LLVMCodeGenVisitor::visitSimpleStmtReturn(
+    const SimpleStmtReturnAST& simpleStmtReturn) {
+  simpleStmtReturn.getExpr()->accept(*this);
+  llvm::Value* retValue = simpleStmtReturn.getExpr()->getCodegenValue();
+  builder->CreateRet(retValue);
+}
 
 llvm::Value* LLVMCodeGenVisitor::lookupVariable(llvm::StringRef varName) {
   return globalVariables[varName];

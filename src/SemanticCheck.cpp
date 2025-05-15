@@ -66,7 +66,9 @@ SemanticCheckVisitor::checkInheritance(const ProgramAST& program) {
 
 void SemanticCheckVisitor::visitProgram(const ProgramAST& program) {
   for (auto& clazz : program.getClassDefs()) {
+    currentClass = clazz.get();
     clazz->accept(*this);
+    currentClass = nullptr;
   }
   for (auto& varDef : program.getVarDefs()) {
     varDef->accept(*this);
@@ -76,9 +78,22 @@ void SemanticCheckVisitor::visitProgram(const ProgramAST& program) {
   }
 }
 
-void SemanticCheckVisitor::visitClass(const ClassAST& clazz) {}
+void SemanticCheckVisitor::visitClass(const ClassAST& clazz) {
+  for (auto& method : clazz.getMethodDefs()) {
+    currentFunction = method.get();
+    method->accept(*this);
+    currentFunction = nullptr;
+  }
+}
 
-void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {};
+void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
+  for (auto& arg : func.getArgs()) {
+    arg->accept(*this);
+  }
+  for (auto& stmt : func.getBody()) {
+    stmt->accept(*this);
+  }
+};
 
 void SemanticCheckVisitor::visitLiteralNumber(
     const LiteralNumberAST& literalNumber) {}
@@ -95,11 +110,19 @@ void SemanticCheckVisitor::visitLiteralString(
 void SemanticCheckVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
 };
 
-void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {}
+void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
+  for (const auto& arg : callExpr.getArgs()) {
+    arg->accept(*this);
+  }
+}
 
 void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
   if (currentClass == nullptr && currentFunction == nullptr) {
     idExpr.setTypeInfo(globalVarToType.at(idExpr.getId().str()));
+  } else if (currentClass != nullptr && currentFunction != nullptr) {
+    if (idExpr.getId() == "self") {
+      idExpr.setTypeInfo(currentClass->getId().str());
+    }
   }
 }
 
@@ -185,5 +208,8 @@ void SemanticCheckVisitor::visitSimpleStmtAssign(
 
 void SemanticCheckVisitor::visitSimpleStmtExpr(
     const SimpleStmtExprAST& simpleStmtExpr) {}
+
+void SemanticCheckVisitor::visitSimpleStmtReturn(
+    const SimpleStmtReturnAST& simpleStmtReturn) {}
 
 } // namespace chocopy

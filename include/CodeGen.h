@@ -41,8 +41,9 @@ public:
 
   void
   visitSimpleStmtAssign(const SimpleStmtAssignAST& simpleStmtAssign) override;
-  void 
-  visitSimpleStmtExpr(const SimpleStmtExprAST& simpleStmtExpr) override;
+  void visitSimpleStmtExpr(const SimpleStmtExprAST& simpleStmtExpr) override;
+  void
+  visitSimpleStmtReturn(const SimpleStmtReturnAST& simpleStmtReturn) override;
 
 private:
   void createBuiltinFuncDecl(const std::string& funcName,
@@ -87,6 +88,7 @@ private:
   std::unordered_map<const FunctionAST*, llvm::Function*> functions;
   std::unordered_map<std::string, llvm::Function*> functionNameToFunc;
   std::map<llvm::StringRef, llvm::GlobalVariable*> globalVariables;
+  std::map<llvm::StringRef, llvm::AllocaInst*> localVariables;
 };
 
 class VirtualTable {

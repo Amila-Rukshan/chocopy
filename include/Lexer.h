@@ -40,6 +40,8 @@ public:
     if (tok != curTok) {
       llvm::errs() << "Token mismatch: expected " << tokenKindToString(tok)
                    << ", but got " << tokenKindToString(curTok) << "\n";
+      llvm::errs() << *lastLocation.file << ":" << lastLocation.line << ":"
+                   << lastLocation.col << "\n";
     }
     assert(tok == curTok && "consume Token mismatch expectation");
     getNextToken();
