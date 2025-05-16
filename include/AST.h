@@ -92,6 +92,7 @@ public:
   const Location& superClassLoc() { return superClassLocation; }
 
   void setParentClass(const ClassAST* classPtr) { parentClass = classPtr; }
+  const ClassAST* getParentClass() const { return parentClass; }
 
   void AddChildClass(const ClassAST* classPtr) {
     childClasses.push_back(classPtr);
@@ -153,6 +154,8 @@ public:
       return classAST->second;
     }
   }
+
+  const ClassAST* getObjectClass() const { return objectClass.get(); }
 
 private:
   std::vector<std::unique_ptr<VarDefAST>> varDefs;

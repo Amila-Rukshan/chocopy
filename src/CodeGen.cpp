@@ -49,6 +49,21 @@ void LLVMCodeGenVisitor::codeGen() {
   module = std::make_unique<llvm::Module>(fileName, *context);
   module->setTargetTriple("x86_64-pc-linux-gnu");
 
+  // object class inclusion
+  classToVTable.insert(
+      std::make_pair(programAST->getObjectClass(),
+                     VirtualTable(*context, programAST->getObjectClass())));
+  classToStructType.insert(
+      std::make_pair(programAST->getObjectClass(),
+                     llvm::StructType::create(
+                         *context, programAST->getObjectClass()->getId())));
+
+  llvm::Type* vtablePtr = classToVTable.at(programAST->getObjectClass())
+                              .GetVTStructType()
+                              ->getPointerTo();
+  std::vector<llvm::Type*> attributeTypes = {vtablePtr};
+  classToStructType.at(programAST->getObjectClass())->setBody(attributeTypes);
+
   createClassTypesAndVtableTypes(programAST->getClassDefs());
 
   /* Include external function declarations */
@@ -83,9 +98,14 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
 
 void LLVMCodeGenVisitor::addAttributes(const ClassAST* classPtr) {
   std::vector<llvm::Type*> attributeTypes;
-  // Add vtable ptr as the first thing in any class type
-  attributeTypes.push_back(
-      getVTable(classPtr).GetVTStructType()->getPointerTo());
+
+  const ClassAST* parentClassPtr = classPtr->getParentClass();
+  attributeTypes.push_back(classToStructType.at(parentClassPtr));
+
+  for (const auto& attribute : classPtr->getVarDefs()) {
+    attributeTypes.push_back(llvmTypeOrClassPtrType(
+        attribute->getTypedVar()->getType()->getTypeName()));
+  }
 
   classToStructType.at(classPtr)->setBody(attributeTypes);
 }
