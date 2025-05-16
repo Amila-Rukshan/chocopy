@@ -87,8 +87,6 @@ void LLVMCodeGenVisitor::addAttributes(const ClassAST* classPtr) {
   attributeTypes.push_back(
       getVTable(classPtr).GetVTStructType()->getPointerTo());
 
-  // TODO: Add inherited and class attributes
-
   classToStructType.at(classPtr)->setBody(attributeTypes);
 }
 
@@ -101,6 +99,21 @@ void LLVMCodeGenVisitor::addMethods(const ClassAST* classPtr) {
 
     vtableFuncs.insert(vtableFuncs.end(), superClassVTableFuncs.begin(),
                        superClassVTableFuncs.end());
+  }
+
+  // extend the ability to lookup the inherited function using current class
+  // name and method combined name
+  for (const auto& inheritedFunc : vtableFuncs) {
+    if (auto funcPtr = llvm::dyn_cast<llvm::Function>(inheritedFunc)) {
+      std::string existingName = funcPtr->getName().str();
+      size_t dashPos = existingName.find('-');
+      if (dashPos != std::string::npos) {
+        std::string existingMethodName = existingName.substr(dashPos + 1);
+        std::string methodLookupNameForClass =
+            classPtr->getId().str() + "-" + existingMethodName;
+        functionNameToFunc[methodLookupNameForClass] = funcPtr;
+      }
+    }
   }
 
   size_t inheritedVTableSize = vtableFuncs.size();
