@@ -1,6 +1,7 @@
 #ifndef CHOCOPY_CODEGEN_H
 #define CHOCOPY_CODEGEN_H
 
+#include <array>
 #include <map>
 
 #include "llvm/IR/DerivedTypes.h"
@@ -89,6 +90,10 @@ private:
   std::unordered_map<std::string, llvm::Function*> functionNameToFunc;
   std::map<llvm::StringRef, llvm::GlobalVariable*> globalVariables;
   std::map<llvm::StringRef, llvm::AllocaInst*> localVariables;
+
+  std::unordered_map<const ClassAST*,
+                     std::unordered_map<std::string, std::vector<uint32_t>>>
+      classFieldGEPMap;
 };
 
 class VirtualTable {

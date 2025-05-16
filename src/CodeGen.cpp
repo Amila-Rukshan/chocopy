@@ -87,6 +87,21 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
     currentClass = nullptr;
   }
 
+  // TODO: temp remove
+  for (const auto& classEntry : classFieldGEPMap) {
+    const ClassAST* classPtr = classEntry.first;
+    std::cout << "Class: " << classPtr->getId().str() << std::endl;
+    for (const auto& attrEntry : classEntry.second) {
+      std::cout << "  Attribute: " << attrEntry.first << " | Indices: [";
+      for (size_t i = 0; i < attrEntry.second.size(); ++i) {
+        std::cout << attrEntry.second[i];
+        if (i + 1 < attrEntry.second.size())
+          std::cout << ", ";
+      }
+      std::cout << "]" << std::endl;
+    }
+  }
+
   for (auto& clazz : program.getClassDefs()) {
     currentClass = const_cast<ClassAST*>(clazz.get());
     clazz->accept(*this);
@@ -100,14 +115,32 @@ void LLVMCodeGenVisitor::addAttributes(const ClassAST* classPtr) {
   std::vector<llvm::Type*> attributeTypes;
 
   const ClassAST* parentClassPtr = classPtr->getParentClass();
+  std::unordered_map<std::string, std::vector<uint32_t>> attrIndexMap;
+
   attributeTypes.push_back(classToStructType.at(parentClassPtr));
+
+  if (parentClassPtr != programAST->getObjectClass()) {
+    const auto& parentMap = classFieldGEPMap.at(parentClassPtr);
+    for (const auto& kv : parentMap) {
+      std::vector<uint32_t> gep = kv.second;
+      gep.insert(gep.begin(), 0);
+      attrIndexMap[kv.first] = gep;
+    }
+  }
+
+  int fieldIndex = 1;
 
   for (const auto& attribute : classPtr->getVarDefs()) {
     attributeTypes.push_back(llvmTypeOrClassPtrType(
         attribute->getTypedVar()->getType()->getTypeName()));
+
+    attrIndexMap[attribute->getTypedVar()->getId().str()] = {
+        static_cast<uint32_t>(fieldIndex)};
+    fieldIndex++;
   }
 
   classToStructType.at(classPtr)->setBody(attributeTypes);
+  classFieldGEPMap[classPtr] = std::move(attrIndexMap);
 }
 
 void LLVMCodeGenVisitor::addMethods(const ClassAST* classPtr) {
