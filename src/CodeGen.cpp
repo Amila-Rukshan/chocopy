@@ -67,7 +67,7 @@ void LLVMCodeGenVisitor::codeGen() {
   createClassTypesAndVtableTypes(programAST->getClassDefs());
 
   /* Include external function declarations */
-  createBuiltinFuncDecl("printf", "int", {"str"});
+  createBuiltinFuncDecl("puts", "int", {"str"});
   createBuiltinFuncDecl("malloc", "str", {"int"});
 
   programAST->accept(*this);
@@ -413,7 +413,7 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   bool isConstructorCall = false;
   if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
     if (callee->getId() == "print") {
-      calleeFunc = module->getFunction("printf");
+      calleeFunc = module->getFunction("puts");
       if (!calleeFunc) {
         llvm::errs() << "Unknown function referenced 'printf'\n";
         return;
