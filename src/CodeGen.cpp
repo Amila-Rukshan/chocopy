@@ -80,6 +80,11 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
 
   for (auto& clazz : program.getClassDefs()) {
     currentClass = clazz.get();
+
+    for (const auto& attributeDef : clazz->getVarDefs()) {
+      attributeDef->accept(*this);
+    }
+
     // add attributes and methods
     addAttributes(clazz.get());
     addMethods(clazz.get());
@@ -92,10 +97,16 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
     const ClassAST* classPtr = classEntry.first;
     std::cout << "Class: " << classPtr->getId().str() << std::endl;
     for (const auto& attrEntry : classEntry.second) {
+      const auto& gepIndices = attrEntry.second.first;
       std::cout << "  Attribute: " << attrEntry.first << " | Indices: [";
-      for (size_t i = 0; i < attrEntry.second.size(); ++i) {
-        std::cout << attrEntry.second[i];
-        if (i + 1 < attrEntry.second.size())
+      for (size_t i = 0; i < gepIndices.size(); ++i) {
+        auto* constInt = llvm::dyn_cast<llvm::ConstantInt>(gepIndices[i]);
+        if (constInt) {
+          std::cout << constInt->getSExtValue();
+        } else {
+          std::cout << "<not int>";
+        }
+        if (i + 1 < gepIndices.size())
           std::cout << ", ";
       }
       std::cout << "]" << std::endl;
@@ -115,27 +126,33 @@ void LLVMCodeGenVisitor::addAttributes(const ClassAST* classPtr) {
   std::vector<llvm::Type*> attributeTypes;
 
   const ClassAST* parentClassPtr = classPtr->getParentClass();
-  std::unordered_map<std::string, std::vector<uint32_t>> attrIndexMap;
+  std::unordered_map<std::string,
+                     std::pair<std::vector<llvm::Value*>, const VarDefAST*>>
+      attrIndexMap;
 
   attributeTypes.push_back(classToStructType.at(parentClassPtr));
+
+  auto makeIndex = [this](uint32_t idx) {
+    return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), idx);
+  };
 
   if (parentClassPtr != programAST->getObjectClass()) {
     const auto& parentMap = classFieldGEPMap.at(parentClassPtr);
     for (const auto& kv : parentMap) {
-      std::vector<uint32_t> gep = kv.second;
-      gep.insert(gep.begin(), 0);
-      attrIndexMap[kv.first] = gep;
+      std::vector<llvm::Value*> gep = kv.second.first;
+      gep.insert(gep.begin(), makeIndex(0));
+      attrIndexMap[kv.first] = std::make_pair(std::move(gep), kv.second.second);
     }
   }
 
   int fieldIndex = 1;
-
   for (const auto& attribute : classPtr->getVarDefs()) {
     attributeTypes.push_back(llvmTypeOrClassPtrType(
         attribute->getTypedVar()->getType()->getTypeName()));
 
-    attrIndexMap[attribute->getTypedVar()->getId().str()] = {
-        static_cast<uint32_t>(fieldIndex)};
+    std::vector<llvm::Value*> gep = {makeIndex(0), makeIndex(fieldIndex)};
+    attrIndexMap[attribute->getTypedVar()->getId().str()] =
+        std::make_pair(std::move(gep), attribute.get());
     fieldIndex++;
   }
 
@@ -358,6 +375,22 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       llvm::FunctionType* funcType = llvmFunc->getFunctionType();
       llvm::Value* val = builder->CreateCall(funcType, funcPtr, args);
       binaryExpr.setCodegenValue(val);
+    } else if (auto rhs = llvm::dyn_cast<IdExprAST>(binaryExpr.getRhs())) {
+      // attribute access
+      binaryExpr.getLhs()->accept(*this);
+      std::string instanceType = binaryExpr.getLhs()->getTypeInfo();
+      llvm::Value* instancePtr = builder->CreateLoad(
+          llvmClass(instanceType)->getPointerTo(),
+          binaryExpr.getLhs()->getCodegenValue(), "current_instance_ptr");
+
+      const auto& attributeGEP =
+          classFieldGEPMap.at(currentClass)[rhs->getId().str()].first;
+      llvm::Value* fieldPtr = builder->CreateGEP(
+          llvmClass(instanceType), instancePtr, attributeGEP, "field_ptr");
+
+      llvm::Value* fieldVal =
+          builder->CreateLoad(fieldPtr->getType(), fieldPtr, "field_val");
+      binaryExpr.setCodegenValue(fieldVal);
     }
     return;
   }
@@ -399,6 +432,24 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
       llvm::Value* vtablePtr = classToVTable.at(classPtr).getGlobalVTableVal();
       builder->CreateStore(vtablePtr, bitcast);
 
+      const auto& classAttributeMetadata = classFieldGEPMap.at(classPtr);
+      // set default field values for bitcast above (raw pointer casted to the
+      // class type)
+      for (const auto& attributeData : classAttributeMetadata) {
+        const auto& attributeGEP = attributeData.second.first;
+        const VarDefAST* varDef = attributeData.second.second;
+        llvm::Value* initialVal = varDef->getLiteral()->getCodegenValue();
+        llvm::Type* fieldType = llvmTypeOrClassPtrType(
+            varDef->getTypedVar()->getType()->getTypeName());
+
+        llvm::Value* fieldPtr = builder->CreateGEP(llvmClass(classPtr), bitcast,
+                                                   attributeGEP, "field_ptr");
+
+        if (initialVal && initialVal->getType() == fieldType) {
+          builder->CreateStore(initialVal, fieldPtr);
+        }
+      }
+
       callExpr.setCodegenValue(bitcast);
     }
   }
@@ -424,6 +475,11 @@ void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
   if (currentClass != nullptr) {
     if (currentFunction == nullptr) {
       // class var def (struct member)
+      const std::string typeName =
+          varDef.getTypedVar()->getType()->getTypeName();
+      llvm::Type* varType = llvmTypeOrClassPtrType(typeName);
+      llvm::Constant* defaultValue = llvmDefaultValue(typeName);
+      varDef.setCodegenValue(defaultValue);
     } else {
       // class method var def (stack var)
     }

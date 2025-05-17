@@ -91,8 +91,10 @@ private:
   std::map<llvm::StringRef, llvm::GlobalVariable*> globalVariables;
   std::map<llvm::StringRef, llvm::AllocaInst*> localVariables;
 
-  std::unordered_map<const ClassAST*,
-                     std::unordered_map<std::string, std::vector<uint32_t>>>
+  std::unordered_map<
+      const ClassAST*,
+      std::unordered_map<
+          std::string, std::pair<std::vector<llvm::Value*>, const VarDefAST*>>>
       classFieldGEPMap;
 };
 

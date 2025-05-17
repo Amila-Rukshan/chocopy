@@ -497,8 +497,15 @@ public:
   const TypedVarAST* getTypedVar() const { return typedVar.get(); }
   const LiteralAST* getLiteral() const { return literal.get(); }
   void accept(ASTVisitor& visitor) const { visitor.visitVarDef(*this); };
+  void setCodegenValue(llvm::Value* value) const { codegenInfo->value = value; }
+
+  llvm::Value* getCodegenValue() const { return codegenInfo->value; }
 
 private:
+  struct CodegenInfo {
+    llvm::Value* value = nullptr;
+  };
+  std::unique_ptr<CodegenInfo> codegenInfo = std::make_unique<CodegenInfo>();
   std::unique_ptr<TypedVarAST> typedVar;
   std::unique_ptr<LiteralAST> literal;
 };

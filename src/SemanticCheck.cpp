@@ -210,6 +210,8 @@ void SemanticCheckVisitor::visitSimpleStmtExpr(
     const SimpleStmtExprAST& simpleStmtExpr) {}
 
 void SemanticCheckVisitor::visitSimpleStmtReturn(
-    const SimpleStmtReturnAST& simpleStmtReturn) {}
+    const SimpleStmtReturnAST& simpleStmtReturn) {
+  simpleStmtReturn.getExpr()->accept(*this);
+}
 
 } // namespace chocopy
