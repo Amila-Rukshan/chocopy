@@ -10,7 +10,7 @@
             "name": "Debug ChocoPy",
             "preLaunchTask": "Build (Debug)",
             "program": "${workspaceFolder}/build/chocopyc",
-            "args": ["${workspaceFolder}/tests/parse/def_func_nested.py"],
+            "args": ["${workspaceFolder}/tests/choco.py"],
             "cwd": "${workspaceFolder}"
         },
         {
