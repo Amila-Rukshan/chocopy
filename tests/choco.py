@@ -1,41 +1,36 @@
 class animal(object):
-    ss: str = "mute"  
-    alien: bool = False
+    encephalization_level: int = 0
+
     def make_noise(self: "animal"):
         print(self.sound())
-  
+
     def sound(self: "animal") -> str:
-        return self.ss
- 
-class cow(animal):
-    # def sound(self: "cow") -> str:
-    #     return "moo\n"
-    cow_sound: str = "MOO..!!"
-    def make_noise(self: "cow"):
-        print(self.cow_sound)
-    
-class dog(animal):
-    dd: str = "dsfw"
-    
-    def make_noise(self: "dog"):
-        print(self.dd)
+        return "???"
 
-c:animal = None
+class dinosaur(animal):
+    can_fly: bool = False
+    
+    def breathe(self: "dinosaur"):
+        pass
+    
+    def sound(self: "dinosaur") -> str:
+        return "RAWR! [Translation: 'I miss the good old days.']"
+    
+class human(animal):
+    greet_text: str = "Hello, world!"
+    
+    def sound(self: "human") -> str:
+        return self.greet_text
+    
+h:animal = None
 d:animal = None
-cc:cow = None
-# dd:dog = None
-# gold: goldenretriever = None
 
-# dd = goldenretriever()
+h = human()
+d = dinosaur()
 
-cc = cow()
-
-cc.make_noise()
-# dd.make_noise()
-
-# c = cow()
-d = dog()
-
+print("===================== Human =======================")
+h.make_noise()
+print("===================================================\n")
+print("=================== Dinosaur ======================")
 d.make_noise()
-
-# print(c.tag)
+print("===================================================\n")

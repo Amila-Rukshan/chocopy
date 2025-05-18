@@ -92,27 +92,6 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
     currentClass = nullptr;
   }
 
-  // TODO: temp remove
-  for (const auto& classEntry : classFieldGEPMap) {
-    const ClassAST* classPtr = classEntry.first;
-    std::cout << "Class: " << classPtr->getId().str() << std::endl;
-    for (const auto& attrEntry : classEntry.second) {
-      const auto& gepIndices = attrEntry.second.first;
-      std::cout << "  Attribute: " << attrEntry.first << " | Indices: [";
-      for (size_t i = 0; i < gepIndices.size(); ++i) {
-        auto* constInt = llvm::dyn_cast<llvm::ConstantInt>(gepIndices[i]);
-        if (constInt) {
-          std::cout << constInt->getSExtValue();
-        } else {
-          std::cout << "<not int>";
-        }
-        if (i + 1 < gepIndices.size())
-          std::cout << ", ";
-      }
-      std::cout << "]" << std::endl;
-    }
-  }
-
   for (auto& clazz : program.getClassDefs()) {
     currentClass = const_cast<ClassAST*>(clazz.get());
     clazz->accept(*this);
