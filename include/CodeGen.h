@@ -96,6 +96,8 @@ private:
       std::unordered_map<
           std::string, std::pair<std::vector<llvm::Value*>, const VarDefAST*>>>
       classFieldGEPMap;
+
+  std::unordered_map<std::string, llvm::GlobalVariable*> stringLiteralMap;
 };
 
 class VirtualTable {

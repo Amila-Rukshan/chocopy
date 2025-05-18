@@ -288,17 +288,25 @@ void LLVMCodeGenVisitor::visitLiteralFalse(
 
 void LLVMCodeGenVisitor::visitLiteralString(
     const LiteralStringAST& literalString) {
-  llvm::Value* stringConstant = llvm::ConstantDataArray::getString(
-      module->getContext(), literalString.getStr());
+  const std::string& str = literalString.getStr().str();
 
-  llvm::GlobalVariable* globalString = new llvm::GlobalVariable(
-      *module, stringConstant->getType(), true,
-      llvm::GlobalValue::PrivateLinkage,
-      llvm::cast<llvm::Constant>(stringConstant), ".str");
+  llvm::GlobalVariable* globalString = nullptr;
+  auto it = stringLiteralMap.find(str);
+  if (it != stringLiteralMap.end()) {
+    globalString = it->second;
+  } else {
+    llvm::Constant* stringConstant =
+        llvm::ConstantDataArray::getString(module->getContext(), str, true);
+
+    globalString = new llvm::GlobalVariable(
+        *module, stringConstant->getType(), true,
+        llvm::GlobalValue::PrivateLinkage, stringConstant, ".str");
+
+    stringLiteralMap[str] = globalString;
+  }
 
   llvm::Value* stringPtr = builder->CreateConstGEP1_64(
-      stringConstant->getType(), globalString, 0, ".str_ptr");
-
+      globalString->getValueType(), globalString, 0, ".str_ptr");
   literalString.setCodegenValue(stringPtr);
 }
 
@@ -599,9 +607,6 @@ void VirtualTable::createVTable(
     vtableMethodTypes.push_back(fn->getType());
 
   virtualTableStructType->setBody(vtableMethodTypes);
-
-  module->getOrInsertGlobal(classAST->getId().str() + "-vtbl.chocopy",
-                            virtualTableStructType);
 
   llvm::GlobalVariable* vtableVar = new llvm::GlobalVariable(
       *module, virtualTableStructType, true, llvm::GlobalValue::ExternalLinkage,
