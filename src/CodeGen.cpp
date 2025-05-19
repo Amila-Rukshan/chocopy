@@ -348,10 +348,10 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       }
 
       llvm::Value* vtablePtrPtr = builder->CreateStructGEP(
-          llvmClass(instanceType), instancePtr, 0, "vtable_ptr_ptr");
+          llvmClass(instanceType), instancePtr, 0, "vtable_ptr");
       llvm::Value* vtablePtr = builder->CreateLoad(
           getVTable(instanceType).GetVTStructType()->getPointerTo(),
-          vtablePtrPtr, "vtable_ptr");
+          vtablePtrPtr, "vtable");
 
       llvm::Value* funcPtrAddr =
           builder->CreateStructGEP(getVTable(instanceType).GetVTStructType(),
