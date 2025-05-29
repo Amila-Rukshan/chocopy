@@ -17,21 +17,23 @@ static llvm::cl::opt<std::string>
     inputFilename(llvm::cl::Positional, llvm::cl::desc("<input chocopy file>"),
                   llvm::cl::init("-"), llvm::cl::value_desc("filename"));
 
-llvm::StringRef parseInputFile(llvm::StringRef filename) {
+std::unique_ptr<llvm::MemoryBuffer> parseInputFile(llvm::StringRef filename) {
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
       llvm::MemoryBuffer::getFileOrSTDIN(filename);
   if (std::error_code ec = fileOrErr.getError()) {
     llvm::errs() << "Could not open input file: " << ec.message() << "\n";
-    return "";
+    return nullptr;
   }
-  auto buffer = fileOrErr.get()->getBuffer();
-  return buffer;
+  return std::move(fileOrErr.get());
 }
 
 int main(int argc, char** argv) {
   llvm::cl::ParseCommandLineOptions(argc, argv, "chocopy compiler\n");
-  auto buffer = parseInputFile(inputFilename);
-
+  auto memBuffer = parseInputFile(inputFilename);
+  if (!memBuffer) {
+    return 1;
+  }
+  auto buffer = memBuffer->getBuffer();
   chocopy::LexerBuffer lexer(buffer.begin(), buffer.end(),
                              std::string(inputFilename));
   chocopy::Parser parser(lexer);
