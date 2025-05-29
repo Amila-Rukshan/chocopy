@@ -386,7 +386,19 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
 
 void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
   if (currentClass == nullptr && currentFunction == nullptr) {
-    idExpr.setCodegenValue(globalVariables[idExpr.getId()]);
+    llvm::GlobalVariable* globalVar = globalVariables[idExpr.getId()];
+    if (globalVar == nullptr) {
+      llvm::errs() << "Unknown global variable: " << idExpr.getId() << "\n";
+      return;
+    }
+    llvm::Type* varType = globalVar->getValueType();
+    if (globalVariableTypes[idExpr.getId()] == "str") {
+      llvm::Value* globalVarVal =
+          builder->CreateLoad(varType, globalVar, "global_var_val");
+      idExpr.setCodegenValue(globalVarVal);
+    } else {
+      idExpr.setCodegenValue(globalVar);
+    }
   } else if (currentClass != nullptr && currentFunction != nullptr) {
     idExpr.setCodegenValue(localVariables[idExpr.getId()]);
   }
@@ -477,11 +489,13 @@ void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
           varDef.getTypedVar()->getType()->getTypeName();
       llvm::Type* varType = llvmTypeOrClassPtrType(typeName);
       llvm::Constant* defaultValue = llvmDefaultValue(typeName);
+      llvm::Constant* initialVal = llvmLiteralValue(*varDef.getLiteral());
       llvm::GlobalVariable* globalVar = new llvm::GlobalVariable(
           *module, varType, false, llvm::GlobalValue::ExternalLinkage,
-          defaultValue, varDef.getTypedVar()->getId().str());
+          initialVal, varDef.getTypedVar()->getId().str());
 
       globalVariables[varDef.getTypedVar()->getId()] = globalVar;
+      globalVariableTypes[varDef.getTypedVar()->getId()] = typeName;
     } else {
       // global function var def
     }
@@ -560,6 +574,45 @@ LLVMCodeGenVisitor::llvmDefaultValue(const std::string& typeName) {
     return llvm::ConstantInt::getFalse(*context);
   return llvm::ConstantPointerNull::get(
       llvmTypeOrClassPtrType(typeName)->getPointerTo());
+}
+
+llvm::Constant*
+LLVMCodeGenVisitor::llvmLiteralValue(const LiteralAST& literal) {
+  if (auto litNum = llvm::dyn_cast<LiteralNumberAST>(&literal)) {
+    return llvm::ConstantInt::getSigned(llvm::Type::getInt64Ty(*context),
+                                        litNum->getNumber());
+  } else if (auto litStr = llvm::dyn_cast<LiteralStringAST>(&literal)) {
+    const std::string& str = litStr->getStr().str();
+
+    llvm::GlobalVariable* globalString = nullptr;
+    auto it = stringLiteralMap.find(str);
+    if (it != stringLiteralMap.end()) {
+      globalString = it->second;
+    } else {
+      llvm::Constant* stringConstant =
+          llvm::ConstantDataArray::getString(*context, str, true);
+
+      globalString = new llvm::GlobalVariable(
+          *module, stringConstant->getType(), true,
+          llvm::GlobalValue::PrivateLinkage, stringConstant, ".str");
+
+      stringLiteralMap[str] = globalString;
+    }
+
+    llvm::Constant* zero =
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0);
+    llvm::Constant* indices[] = {zero, zero};
+    llvm::Constant* strPtr = llvm::ConstantExpr::getGetElementPtr(
+        globalString->getValueType(), globalString, indices, true);
+    return strPtr;
+  } else if (llvm::isa<LiteralTrueAST>(literal)) {
+    return llvm::ConstantInt::getTrue(*context);
+  } else if (llvm::isa<LiteralFalseAST>(literal)) {
+    return llvm::ConstantInt::getFalse(*context);
+  } else if (llvm::isa<LiteralNoneAST>(literal)) {
+    return llvm::ConstantPointerNull::get(
+        llvmTypeOrClassPtrType("object")->getPointerTo());
+  }
 }
 
 llvm::Type*

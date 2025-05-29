@@ -72,6 +72,7 @@ private:
   void addMethods(const ClassAST* classPtr);
   std::string getRetTypeName(const TypeAST* type);
   llvm::Constant* llvmDefaultValue(const std::string& typeName);
+  llvm::Constant* llvmLiteralValue(const LiteralAST& literal);
   llvm::Function* llvmFunc(const FunctionAST* function);
   llvm::Value* lookupVariable(llvm::StringRef varName);
 
@@ -89,6 +90,7 @@ private:
   std::unordered_map<const FunctionAST*, llvm::Function*> functions;
   std::unordered_map<std::string, llvm::Function*> functionNameToFunc;
   std::map<llvm::StringRef, llvm::GlobalVariable*> globalVariables;
+  std::map<llvm::StringRef, std::string> globalVariableTypes;
   std::map<llvm::StringRef, llvm::AllocaInst*> localVariables;
 
   std::unordered_map<
