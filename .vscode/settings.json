@@ -68,6 +68,10 @@
         "stop_token": "cpp",
         "thread": "cpp",
         "variant": "cpp",
-        "complex": "cpp"
+        "complex": "cpp",
+        "codecvt": "cpp",
+        "*.inc": "cpp",
+        "*.def": "cpp",
+        "filesystem": "cpp"
     }
 }

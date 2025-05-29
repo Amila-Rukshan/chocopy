@@ -43,7 +43,7 @@ int main(int argc, char** argv) {
   auto errors = semanticCheck.check(*program);
   if (!errors.empty()) {
     for (const auto& error : errors) {
-      llvm::errs() << inputFilename << error.get_error_message();
+      llvm::errs() << inputFilename << error.getErrorMsg();
     }
     return 1;
   }

@@ -53,6 +53,13 @@ SemanticCheckVisitor::checkInheritance(const ProgramAST& program) {
                         "class '" + classId + "' is already defined\n"));
       errorFound = true;
     }
+    if (std::find(definedClassIds.begin(), definedClassIds.end(),
+                  superClassId) == definedClassIds.end()) {
+      errors.push_back(SemanticError(
+          clazz->superClassLoc().line, clazz->superClassLoc().col,
+          "Inherited class '" + superClassId + "' is not found\n"));
+      errorFound = true;
+    }
     if (!errorFound) {
       definedClassIds.push_back(classId);
 
@@ -90,6 +97,34 @@ void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
   for (auto& arg : func.getArgs()) {
     arg->accept(*this);
   }
+
+  // class methods type checks
+  if (currentClass != nullptr) {
+    if (func.getArgs().empty()) {
+      errors.push_back(
+          SemanticError(func.loc().line, func.loc().col,
+                        "Method '" + func.getId().str() + "' in class '" +
+                            currentClass->getId().str() +
+                            "' must have at least one parameter 'self'\n"));
+    } else {
+      auto firstArg = func.getArgs().front().get();
+      if (firstArg->getId() != "self") {
+        errors.push_back(
+            SemanticError(firstArg->loc().line, firstArg->loc().col,
+                          "First parameter of method '" + func.getId().str() +
+                              "' in class '" + currentClass->getId().str() +
+                              "' must be named 'self'\n"));
+      }
+      if (firstArg->getTypeInfo() != currentClass->getId().str()) {
+        errors.push_back(SemanticError(
+            firstArg->loc().line, firstArg->loc().col,
+            "First parameter 'self' of method '" + func.getId().str() +
+                "' must be of type of its class '" +
+                currentClass->getId().str() + "'\n"));
+      }
+    }
+  }
+
   for (auto& stmt : func.getBody()) {
     stmt->accept(*this);
   }

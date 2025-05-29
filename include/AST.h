@@ -206,6 +206,8 @@ public:
 
   void accept(ASTVisitor& visitor) const { visitor.visitFunction(*this); };
 
+  const Location& loc() const { return location; }
+
 private:
   Location location;
   const std::string id;

@@ -28,6 +28,14 @@
             "preLaunchTask":  "Build Parser Test (Debug)",
             "program": "${workspaceFolder}/build/unittests/Parser/ParserTest",
             "cwd": "${workspaceFolder}"
-        }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Semantic Check Tests",
+            "preLaunchTask":  "Build SemanticCheck Test (Debug)",
+            "program": "${workspaceFolder}/build/unittests/SemanticCheck/SemanticCheckTest",
+            "cwd": "${workspaceFolder}"
+        },
     ]
 }

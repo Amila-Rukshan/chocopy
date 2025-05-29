@@ -11,7 +11,7 @@ class SemanticError {
 public:
   SemanticError(int line, int column, std::string message)
       : line(line), column(column), message(message) {}
-  std::string get_error_message() const {
+  std::string getErrorMsg() const {
     return ":" + std::to_string(line) + ":" + std::to_string(column) + ": " +
            message;
   }

@@ -34,5 +34,16 @@
           "isDefault": true
         }
       },
+      {
+        "label": "Build SemanticCheck Test (Debug)",
+        "type": "shell",
+        "linux": {
+          "command": "mkdir -p ${workspaceFolder}/build && cd ${workspaceFolder}/build && cmake -G Ninja -DENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug .. && cmake --build . --target SemanticCheckTest"
+        },
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        }
+      },
     ]
 }
