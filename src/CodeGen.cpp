@@ -69,6 +69,7 @@ void LLVMCodeGenVisitor::codeGen() {
   /* Include external function declarations */
   createBuiltinFuncDecl("puts", "int", {"str"});
   createBuiltinFuncDecl("malloc", "str", {"int"});
+  createBuiltinFuncDecl("printf", "int", {"str"}, true);
 
   programAST->accept(*this);
 }
@@ -271,7 +272,7 @@ void LLVMCodeGenVisitor::codeGenMainFunc(
 void LLVMCodeGenVisitor::visitLiteralNumber(
     const LiteralNumberAST& literalNumber) {
   llvm::Value* codegenValue = llvm::ConstantInt::getSigned(
-      llvm::Type::getInt64Ty(*context), literalNumber.getNumber());
+      llvm::Type::getInt32Ty(*context), literalNumber.getNumber());
   literalNumber.setCodegenValue(codegenValue);
 }
 
@@ -305,7 +306,7 @@ void LLVMCodeGenVisitor::visitLiteralString(
     stringLiteralMap[str] = globalString;
   }
 
-  llvm::Value* stringPtr = builder->CreateConstGEP1_64(
+  llvm::Value* stringPtr = builder->CreateConstGEP1_32(
       globalString->getValueType(), globalString, 0, ".str_ptr");
   literalString.setCodegenValue(stringPtr);
 }
@@ -372,11 +373,16 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
 
       const auto& attributeGEP =
           classFieldGEPMap.at(currentClass)[rhs->getId().str()].first;
-      llvm::Value* fieldPtr = builder->CreateGEP(
-          llvmClass(instanceType), instancePtr, attributeGEP, "field_ptr");
+      llvm::Value* fieldVal = builder->CreateGEP(
+          llvmClass(instanceType), instancePtr, attributeGEP, "field_val");
 
-      llvm::Value* fieldVal =
-          builder->CreateLoad(fieldPtr->getType(), fieldPtr, "field_val");
+      std::string fieldTypeName =
+          classFieldGEPMap.at(currentClass)[rhs->getId().str()]
+              .second->getTypedVar()
+              ->getType()
+              ->getTypeName();
+      llvm::Type* fieldType = llvmTypeOrClassPtrType(fieldTypeName);
+      fieldVal = builder->CreateLoad(fieldType, fieldVal, "field_val_derefed");
       binaryExpr.setCodegenValue(fieldVal);
     }
     return;
@@ -392,7 +398,9 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
       return;
     }
     llvm::Type* varType = globalVar->getValueType();
-    if (globalVariableTypes[idExpr.getId()] == "str") {
+    if (globalVariableTypes[idExpr.getId()] == "str" ||
+        globalVariableTypes[idExpr.getId()] == "int" ||
+        globalVariableTypes[idExpr.getId()] == "bool") {
       llvm::Value* globalVarVal =
           builder->CreateLoad(varType, globalVar, "global_var_val");
       idExpr.setCodegenValue(globalVarVal);
@@ -412,11 +420,33 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   bool isConstructorCall = false;
   if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
     if (callee->getId() == "print") {
-      calleeFunc = module->getFunction("puts");
-      if (!calleeFunc) {
-        llvm::errs() << "Unknown function referenced 'printf'\n";
-        return;
+      auto& arg = callExpr.getArgs().front();
+      llvm::Value* argVal = arg->getCodegenValue();
+      std::string argType = arg->getTypeInfo();
+
+      if (argType == "str") {
+        llvm::Function* putsFunc = module->getFunction("puts");
+        builder->CreateCall(putsFunc, {argVal});
+      } else if (argType == "int") {
+        llvm::Constant* fmtStr = getOrCreateGlobalFmtStr("%d\n", ".fmt_int");
+        llvm::Function* printfFunc = module->getFunction("printf");
+        llvm::Value* intVal = argVal;
+        builder->CreateCall(printfFunc, {fmtStr, intVal});
+      } else if (argType == "bool") {
+        llvm::Constant* trueStr = getOrCreateGlobalFmtStr("True", ".fmt_true");
+        llvm::Constant* falseStr =
+            getOrCreateGlobalFmtStr("False", ".fmt_false");
+        llvm::Function* putsFunc = module->getFunction("puts");
+        llvm::Value* boolCond =
+            builder->CreateICmpEQ(argVal, llvm::ConstantInt::getTrue(*context));
+        llvm::Value* strToPrint =
+            builder->CreateSelect(boolCond, trueStr, falseStr);
+        builder->CreateCall(putsFunc, {strToPrint});
+      } else {
+        llvm::Function* putsFunc = module->getFunction("puts");
+        builder->CreateCall(putsFunc, {argVal});
       }
+      return;
     } else if (auto classPtr = getClassByName(callee->getId().str())) {
       isConstructorCall = true;
       size_t structSize = module->getDataLayout().getTypeAllocSize(
@@ -438,8 +468,9 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
         const auto& attributeGEP = attributeData.second.first;
         const VarDefAST* varDef = attributeData.second.second;
         llvm::Value* initialVal = varDef->getLiteral()->getCodegenValue();
-        llvm::Type* fieldType = llvmTypeOrClassPtrType(
-            varDef->getTypedVar()->getType()->getTypeName());
+        std::string attributeTypeName =
+            varDef->getTypedVar()->getType()->getTypeName();
+        llvm::Type* fieldType = llvmTypeOrClassPtrType(attributeTypeName);
 
         llvm::Value* fieldPtr = builder->CreateGEP(llvmClass(classPtr), bitcast,
                                                    attributeGEP, "field_ptr");
@@ -567,7 +598,7 @@ LLVMCodeGenVisitor::llvmDefaultValue(const std::string& typeName) {
   if (typeName == "<None>")
     return nullptr;
   if (typeName == "int")
-    return llvm::ConstantInt::get(*context, llvm::APInt(64, 0));
+    return llvm::ConstantInt::get(*context, llvm::APInt(32, 0));
   if (typeName == "str")
     return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(*context));
   if (typeName == "bool")
@@ -579,7 +610,7 @@ LLVMCodeGenVisitor::llvmDefaultValue(const std::string& typeName) {
 llvm::Constant*
 LLVMCodeGenVisitor::llvmLiteralValue(const LiteralAST& literal) {
   if (auto litNum = llvm::dyn_cast<LiteralNumberAST>(&literal)) {
-    return llvm::ConstantInt::getSigned(llvm::Type::getInt64Ty(*context),
+    return llvm::ConstantInt::getSigned(llvm::Type::getInt32Ty(*context),
                                         litNum->getNumber());
   } else if (auto litStr = llvm::dyn_cast<LiteralStringAST>(&literal)) {
     const std::string& str = litStr->getStr().str();
@@ -613,6 +644,26 @@ LLVMCodeGenVisitor::llvmLiteralValue(const LiteralAST& literal) {
     return llvm::ConstantPointerNull::get(
         llvmTypeOrClassPtrType("object")->getPointerTo());
   }
+}
+
+llvm::Constant*
+LLVMCodeGenVisitor::getOrCreateGlobalFmtStr(const std::string& str,
+                                            const std::string& name) {
+  auto it = stringLiteralMap.find(str);
+  if (it != stringLiteralMap.end())
+    return it->second;
+  llvm::Constant* strConst =
+      llvm::ConstantDataArray::getString(*context, str, true);
+  auto* globalStr = new llvm::GlobalVariable(*module, strConst->getType(), true,
+                                             llvm::GlobalValue::PrivateLinkage,
+                                             strConst, name);
+  llvm::Constant* zero =
+      llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0);
+  llvm::Constant* indices[] = {zero, zero};
+  llvm::Constant* strPtr = llvm::ConstantExpr::getGetElementPtr(
+      globalStr->getValueType(), globalStr, indices, true);
+  stringLiteralMap[str] = globalStr;
+  return strPtr;
 }
 
 llvm::Type*

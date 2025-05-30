@@ -96,6 +96,10 @@ void SemanticCheckVisitor::visitClass(const ClassAST& clazz) {
 void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
   for (auto& arg : func.getArgs()) {
     arg->accept(*this);
+    if (currentClass != nullptr)
+      localVarToType[arg->getId().str()] = arg->getTypeInfo();
+    else
+      globalVarToType[arg->getId().str()] = arg->getTypeInfo();
   }
 
   // class methods type checks
@@ -131,16 +135,23 @@ void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
 };
 
 void SemanticCheckVisitor::visitLiteralNumber(
-    const LiteralNumberAST& literalNumber) {}
+    const LiteralNumberAST& literalNumber) {
+  literalNumber.setTypeInfo("int");
+}
 
 void SemanticCheckVisitor::visitLiteralTrue(const LiteralTrueAST& literalTrue) {
+  literalTrue.setTypeInfo("bool");
 }
 
 void SemanticCheckVisitor::visitLiteralFalse(
-    const LiteralFalseAST& literalFalse) {}
+    const LiteralFalseAST& literalFalse) {
+  literalFalse.setTypeInfo("bool");
+}
 
 void SemanticCheckVisitor::visitLiteralString(
-    const LiteralStringAST& literalString) {}
+    const LiteralStringAST& literalString) {
+  literalString.setTypeInfo("str");
+}
 
 void SemanticCheckVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
 };
@@ -164,6 +175,21 @@ void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
 void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
   binaryExpr.getLhs()->accept(*this);
   binaryExpr.getRhs()->accept(*this);
+  if (binaryExpr.getOp() == TokenKind::kAttrAccessOp) {
+    auto lhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getLhs());
+    auto rhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getRhs());
+    if (lhsId && rhsId && lhsId->getId() == "self" && currentClass) {
+      const VarDefAST* attr =
+          lookupAttributeInHierarchy(currentClass, rhsId->getId().str());
+      if (attr) {
+        binaryExpr.setTypeInfo(attr->getTypedVar()->getType()->getTypeName());
+      } else {
+        errors.push_back(
+            SemanticError(rhsId->loc().line, rhsId->loc().col,
+                          "Unknown attribute: " + rhsId->getId().str() + "\n"));
+      }
+    }
+  }
 }
 
 void SemanticCheckVisitor::visitVarDef(const VarDefAST& varDef) {

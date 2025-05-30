@@ -58,10 +58,22 @@ private:
   std::vector<SemanticError> errors;
   std::vector<std::string> definedClassIds = {"object", "str", "bool", "int"};
   std::unordered_map<std::string, std::string> globalVarToType;
+  std::unordered_map<std::string, std::string> localVarToType;
 
   ClassAST* currentClass = nullptr;
   FunctionAST* currentFunction = nullptr;
 };
+
+inline const VarDefAST* lookupAttributeInHierarchy(const ClassAST* clazz,
+                                                   const std::string& attrId) {
+  while (clazz && clazz->getId() != "object") {
+    if (clazz->hasAttribute(attrId)) {
+      return clazz->getAttribute(attrId);
+    }
+    clazz = clazz->getParentClass();
+  }
+  return nullptr;
+}
 
 } // namespace chocopy
 

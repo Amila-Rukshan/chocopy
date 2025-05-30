@@ -20,6 +20,7 @@ class TypedVarAST;
 class FunctionAST;
 class ClassAST;
 class ProgramAST;
+class LiteralAST;
 
 class LiteralNumberAST;
 class LiteralTrueAST;
@@ -63,6 +64,62 @@ public:
 };
 
 /***********************************/
+/* TypedVar                        */
+/***********************************/
+
+class TypedVarAST {
+public:
+  TypedVarAST(std::string id, Location location, std::unique_ptr<TypeAST> type)
+      : id(std::move(id)), type(std::move(type)),
+        location(std::move(location)) {}
+
+  const llvm::StringRef getId() const { return id; }
+
+  const TypeAST* getType() const { return type.get(); }
+  const Location& loc() const { return location; }
+
+  void accept(ASTVisitor& visitor) const { visitor.visitTypedVar(*this); };
+
+  void setTypeInfo(const std::string& type) const { typeInfo->type = type; }
+
+  const std::string& getTypeInfo() const { return typeInfo->type; }
+
+private:
+  struct TypeInfo {
+    std::string type = "UNTYPED";
+  };
+  std::unique_ptr<TypeInfo> typeInfo = std::make_unique<TypeInfo>();
+  const std::string id;
+  std::unique_ptr<TypeAST> type;
+  Location location;
+};
+
+/***********************************/
+/* VarDef                          */
+/***********************************/
+
+class VarDefAST {
+public:
+  VarDefAST(std::unique_ptr<TypedVarAST> typedVar,
+            std::unique_ptr<LiteralAST> literal)
+      : typedVar(std::move(typedVar)), literal(std::move(literal)) {}
+  const TypedVarAST* getTypedVar() const { return typedVar.get(); }
+  const LiteralAST* getLiteral() const { return literal.get(); }
+  void accept(ASTVisitor& visitor) const { visitor.visitVarDef(*this); };
+  void setCodegenValue(llvm::Value* value) const { codegenInfo->value = value; }
+
+  llvm::Value* getCodegenValue() const { return codegenInfo->value; }
+
+private:
+  struct CodegenInfo {
+    llvm::Value* value = nullptr;
+  };
+  std::unique_ptr<CodegenInfo> codegenInfo = std::make_unique<CodegenInfo>();
+  std::unique_ptr<TypedVarAST> typedVar;
+  std::unique_ptr<LiteralAST> literal;
+};
+
+/***********************************/
 /* Class                           */
 /***********************************/
 
@@ -96,6 +153,24 @@ public:
 
   void AddChildClass(const ClassAST* classPtr) {
     childClasses.push_back(classPtr);
+  }
+
+  bool hasAttribute(const std::string& attrId) const {
+    for (const auto& varDef : varDefs) {
+      if (varDef->getTypedVar()->getId() == attrId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  const VarDefAST* getAttribute(const std::string& attrId) const {
+    for (const auto& varDef : varDefs) {
+      if (varDef->getTypedVar()->getId() == attrId) {
+        return varDef.get();
+      }
+    }
+    return nullptr;
   }
 
 private:
@@ -305,37 +380,6 @@ private:
 };
 
 /***********************************/
-/* TypedVar                        */
-/***********************************/
-
-class TypedVarAST {
-public:
-  TypedVarAST(std::string id, Location location, std::unique_ptr<TypeAST> type)
-      : id(std::move(id)), type(std::move(type)),
-        location(std::move(location)) {}
-
-  const llvm::StringRef getId() const { return id; }
-
-  const TypeAST* getType() const { return type.get(); }
-  const Location& loc() const { return location; }
-
-  void accept(ASTVisitor& visitor) const { visitor.visitTypedVar(*this); };
-
-  void setTypeInfo(const std::string& type) const { typeInfo->type = type; }
-
-  const std::string& getTypeInfo() const { return typeInfo->type; }
-
-private:
-  struct TypeInfo {
-    std::string type = "UNTYPED";
-  };
-  std::unique_ptr<TypeInfo> typeInfo = std::make_unique<TypeInfo>();
-  const std::string id;
-  std::unique_ptr<TypeAST> type;
-  Location location;
-};
-
-/***********************************/
 /* Literal                         */
 /***********************************/
 
@@ -485,31 +529,6 @@ public:
 
 private:
   const std::string id;
-};
-
-/***********************************/
-/* VarDef                          */
-/***********************************/
-
-class VarDefAST {
-public:
-  VarDefAST(std::unique_ptr<TypedVarAST> typedVar,
-            std::unique_ptr<LiteralAST> literal)
-      : typedVar(std::move(typedVar)), literal(std::move(literal)) {}
-  const TypedVarAST* getTypedVar() const { return typedVar.get(); }
-  const LiteralAST* getLiteral() const { return literal.get(); }
-  void accept(ASTVisitor& visitor) const { visitor.visitVarDef(*this); };
-  void setCodegenValue(llvm::Value* value) const { codegenInfo->value = value; }
-
-  llvm::Value* getCodegenValue() const { return codegenInfo->value; }
-
-private:
-  struct CodegenInfo {
-    llvm::Value* value = nullptr;
-  };
-  std::unique_ptr<CodegenInfo> codegenInfo = std::make_unique<CodegenInfo>();
-  std::unique_ptr<TypedVarAST> typedVar;
-  std::unique_ptr<LiteralAST> literal;
 };
 
 /***********************************/

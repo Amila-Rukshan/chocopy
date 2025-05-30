@@ -93,6 +93,9 @@ private:
   std::map<llvm::StringRef, std::string> globalVariableTypes;
   std::map<llvm::StringRef, llvm::AllocaInst*> localVariables;
 
+  llvm::Constant* getOrCreateGlobalFmtStr(const std::string& str,
+                                          const std::string& name);
+
   std::unordered_map<
       const ClassAST*,
       std::unordered_map<
