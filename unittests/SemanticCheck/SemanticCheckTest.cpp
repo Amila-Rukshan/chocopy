@@ -164,4 +164,40 @@ class vehicle(object):
             "of its class 'vehicle'\n");
 }
 
+TEST(SemanticCheckTest, TestIntegerArithmetic) {
+  std::string program = R"(
+i:int = 1
+b: bool = True
+k: int = 0
+
+k = i + b
+k = i - False
+k = "str" * i
+k = i // True
+k = i % "devider"
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  chocopy::Parser parser(lexer);
+  std::unique_ptr<chocopy::ProgramAST> programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+
+  chocopy::SemanticCheckVisitor semanticCheck;
+  auto errors = semanticCheck.check(*programAST);
+
+  ASSERT_FALSE(errors.empty());
+  ASSERT_EQ(errors.size(), 5);
+  ASSERT_EQ(errors[0].getErrorMsg(),
+            ":6:7: Unsupported types for '+' operator: 'int' and 'bool'\n");
+  ASSERT_EQ(errors[1].getErrorMsg(),
+            ":7:7: Unsupported types for '-' operator: 'int' and 'bool'\n");
+  ASSERT_EQ(errors[2].getErrorMsg(),
+            ":8:11: Unsupported types for '*' operator: 'str' and 'int'\n");
+  ASSERT_EQ(errors[3].getErrorMsg(),
+            ":9:7: Unsupported types for '//' operator: 'int' and 'bool'\n");
+  ASSERT_EQ(errors[4].getErrorMsg(),
+            ":10:7: Unsupported types for '%' operator: 'int' and 'str'\n");
+}
+
 } // namespace chocopy

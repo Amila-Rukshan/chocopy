@@ -120,6 +120,59 @@ private:
 };
 
 /***********************************/
+/* Function                        */
+/***********************************/
+
+class FunctionAST {
+public:
+  FunctionAST(Location location, std::string id,
+              std::vector<std::unique_ptr<TypedVarAST>> args,
+              std::unique_ptr<TypeAST> returnType,
+              std::vector<std::unique_ptr<VarDefAST>> varDefs,
+              std::vector<std::string> globalDecls,
+              std::vector<std::string> nonlocalDecls,
+              std::vector<std::unique_ptr<FunctionAST>> funcDefs,
+              std::vector<std::unique_ptr<StmtAST>> body)
+      : location(location), id(std::move(id)), args(std::move(args)),
+        returnType(std::move(returnType)), varDefs(std::move(varDefs)),
+        globalDecls(std::move(globalDecls)),
+        nonlocalDecls(std::move(nonlocalDecls)), funcDefs(std::move(funcDefs)),
+        body(std::move(body)) {}
+
+  const llvm::StringRef getId() const { return id; }
+  const std::vector<std::unique_ptr<TypedVarAST>>& getArgs() const {
+    return args;
+  }
+  const TypeAST* getReturnType() const { return returnType.get(); }
+  const std::vector<std::unique_ptr<VarDefAST>>& getVarDefs() const {
+    return varDefs;
+  }
+  const std::vector<std::string>& getGlobalDecls() const { return globalDecls; }
+  const std::vector<std::string>& getNonlocalDecls() const {
+    return nonlocalDecls;
+  }
+  const std::vector<std::unique_ptr<FunctionAST>>& getFuncDefs() const {
+    return funcDefs;
+  }
+  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
+
+  void accept(ASTVisitor& visitor) const { visitor.visitFunction(*this); };
+
+  const Location& loc() const { return location; }
+
+private:
+  Location location;
+  const std::string id;
+  std::vector<std::unique_ptr<TypedVarAST>> args;
+  std::unique_ptr<TypeAST> returnType;
+  std::vector<std::unique_ptr<VarDefAST>> varDefs;
+  std::vector<std::string> globalDecls;
+  std::vector<std::string> nonlocalDecls;
+  std::vector<std::unique_ptr<FunctionAST>> funcDefs;
+  std::vector<std::unique_ptr<StmtAST>> body;
+};
+
+/***********************************/
 /* Class                           */
 /***********************************/
 
@@ -163,11 +216,26 @@ public:
     }
     return false;
   }
-
   const VarDefAST* getAttribute(const std::string& attrId) const {
     for (const auto& varDef : varDefs) {
       if (varDef->getTypedVar()->getId() == attrId) {
         return varDef.get();
+      }
+    }
+    return nullptr;
+  }
+  bool hasMethod(const std::string& methodId) const {
+    for (const auto& funcDef : funcDefs) {
+      if (funcDef->getId() == methodId) {
+        return true;
+      }
+    }
+    return false;
+  }
+  const FunctionAST* getMethod(const std::string& methodId) const {
+    for (const auto& funcDef : funcDefs) {
+      if (funcDef->getId() == methodId) {
+        return funcDef.get();
       }
     }
     return nullptr;
@@ -240,59 +308,6 @@ private:
 
   std::unique_ptr<ClassAST> objectClass;
   std::unordered_map<std::string, ClassAST*> classIdToClassAST;
-};
-
-/***********************************/
-/* Function                        */
-/***********************************/
-
-class FunctionAST {
-public:
-  FunctionAST(Location location, std::string id,
-              std::vector<std::unique_ptr<TypedVarAST>> args,
-              std::unique_ptr<TypeAST> returnType,
-              std::vector<std::unique_ptr<VarDefAST>> varDefs,
-              std::vector<std::string> globalDecls,
-              std::vector<std::string> nonlocalDecls,
-              std::vector<std::unique_ptr<FunctionAST>> funcDefs,
-              std::vector<std::unique_ptr<StmtAST>> body)
-      : location(location), id(std::move(id)), args(std::move(args)),
-        returnType(std::move(returnType)), varDefs(std::move(varDefs)),
-        globalDecls(std::move(globalDecls)),
-        nonlocalDecls(std::move(nonlocalDecls)), funcDefs(std::move(funcDefs)),
-        body(std::move(body)) {}
-
-  const llvm::StringRef getId() const { return id; }
-  const std::vector<std::unique_ptr<TypedVarAST>>& getArgs() const {
-    return args;
-  }
-  const TypeAST* getReturnType() const { return returnType.get(); }
-  const std::vector<std::unique_ptr<VarDefAST>>& getVarDefs() const {
-    return varDefs;
-  }
-  const std::vector<std::string>& getGlobalDecls() const { return globalDecls; }
-  const std::vector<std::string>& getNonlocalDecls() const {
-    return nonlocalDecls;
-  }
-  const std::vector<std::unique_ptr<FunctionAST>>& getFuncDefs() const {
-    return funcDefs;
-  }
-  const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
-
-  void accept(ASTVisitor& visitor) const { visitor.visitFunction(*this); };
-
-  const Location& loc() const { return location; }
-
-private:
-  Location location;
-  const std::string id;
-  std::vector<std::unique_ptr<TypedVarAST>> args;
-  std::unique_ptr<TypeAST> returnType;
-  std::vector<std::unique_ptr<VarDefAST>> varDefs;
-  std::vector<std::string> globalDecls;
-  std::vector<std::string> nonlocalDecls;
-  std::vector<std::unique_ptr<FunctionAST>> funcDefs;
-  std::vector<std::unique_ptr<StmtAST>> body;
 };
 
 /***********************************/

@@ -62,6 +62,7 @@ SemanticCheckVisitor::checkInheritance(const ProgramAST& program) {
     }
     if (!errorFound) {
       definedClassIds.push_back(classId);
+      definedClasses[classId] = clazz.get();
 
       auto superClass = program.GetClassPtr(superClassId);
       clazz->setParentClass(superClass);
@@ -175,20 +176,115 @@ void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
 void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
   binaryExpr.getLhs()->accept(*this);
   binaryExpr.getRhs()->accept(*this);
-  if (binaryExpr.getOp() == TokenKind::kAttrAccessOp) {
-    auto lhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getLhs());
-    auto rhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getRhs());
-    if (lhsId && rhsId && lhsId->getId() == "self" && currentClass) {
-      const VarDefAST* attr =
-          lookupAttributeInHierarchy(currentClass, rhsId->getId().str());
-      if (attr) {
-        binaryExpr.setTypeInfo(attr->getTypedVar()->getType()->getTypeName());
-      } else {
-        errors.push_back(
-            SemanticError(rhsId->loc().line, rhsId->loc().col,
-                          "Unknown attribute: " + rhsId->getId().str() + "\n"));
+  switch (binaryExpr.getOp()) {
+  case TokenKind::kAttrAccessOp: {
+    if (currentClass && currentFunction) {
+      auto lhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getLhs());
+      auto rhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getRhs());
+      if (lhsId && rhsId && lhsId->getId() == "self" && currentClass) {
+        const VarDefAST* attr =
+            lookupAttributeInHierarchy(currentClass, rhsId->getId().str());
+        if (attr) {
+          binaryExpr.setTypeInfo(attr->getTypedVar()->getType()->getTypeName());
+        } else {
+          errors.push_back(SemanticError(
+              rhsId->loc().line, rhsId->loc().col,
+              "Unknown attribute: " + rhsId->getId().str() + "\n"));
+        }
+      }
+    } else if (!currentClass && !currentFunction) {
+      // check if lhs is  class type and right hand side is a function
+      // call then lookup that method in the class hierarchy and get the return
+      // type
+      auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+      auto rhsCall = llvm::dyn_cast<CallExprAST>(binaryExpr.getRhs());
+      if (std::find(definedClassIds.begin(), definedClassIds.end(), lhsType) !=
+              definedClassIds.end() &&
+          rhsCall) {
+        auto calleeId = llvm::dyn_cast<IdExprAST>(rhsCall->getCallee());
+        auto classPtr = definedClasses[lhsType];
+        if (calleeId) {
+          const FunctionAST* method =
+              lookupMethodInHierarchy(classPtr, calleeId->getId().str());
+          if (method) {
+            binaryExpr.setTypeInfo(method->getReturnType()->getTypeName());
+          } else {
+            errors.push_back(SemanticError(
+                calleeId->loc().line, calleeId->loc().col,
+                "Unknown method: " + calleeId->getId().str() + "\n"));
+          }
+        }
       }
     }
+    return;
+  }
+  case TokenKind::kPlus: {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (lhsType == "str" && rhsType == "str") {
+      binaryExpr.setTypeInfo("str");
+    } else if (lhsType == "int" && rhsType == "int") {
+      binaryExpr.setTypeInfo("int");
+    } else {
+      errors.push_back(
+          SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
+                        "Unsupported types for '+' operator: '" + lhsType +
+                            "' and '" + rhsType + "'\n"));
+    }
+    return;
+  }
+  case TokenKind::kMinus: {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (lhsType == "int" && rhsType == "int") {
+      binaryExpr.setTypeInfo("int");
+    } else {
+      errors.push_back(
+          SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
+                        "Unsupported types for '-' operator: '" + lhsType +
+                            "' and '" + rhsType + "'\n"));
+    }
+    return;
+  }
+  case TokenKind::kMul: {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (lhsType == "int" && rhsType == "int") {
+      binaryExpr.setTypeInfo("int");
+    } else {
+      errors.push_back(
+          SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
+                        "Unsupported types for '*' operator: '" + lhsType +
+                            "' and '" + rhsType + "'\n"));
+    }
+    return;
+  }
+  case TokenKind::kIntDiv: {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (lhsType == "int" && rhsType == "int") {
+      binaryExpr.setTypeInfo("int");
+    } else {
+      errors.push_back(
+          SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
+                        "Unsupported types for '//' operator: '" + lhsType +
+                            "' and '" + rhsType + "'\n"));
+    }
+    return;
+  }
+  case TokenKind::kMod: {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (lhsType == "int" && rhsType == "int") {
+      binaryExpr.setTypeInfo("int");
+    } else {
+      errors.push_back(
+          SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
+                        "Unsupported types for '%' operator: '" + lhsType +
+                            "' and '" + rhsType + "'\n"));
+    }
+    return;
+  }
   }
 }
 
@@ -265,7 +361,12 @@ void SemanticCheckVisitor::visitTypedVar(const TypedVarAST& typedVar) {
 }
 
 void SemanticCheckVisitor::visitSimpleStmtAssign(
-    const SimpleStmtAssignAST& simpleStmtAssign) {}
+    const SimpleStmtAssignAST& simpleStmtAssign) {
+  for (const auto& target : simpleStmtAssign.getTargets()) {
+    target->accept(*this);
+  }
+  simpleStmtAssign.getRhs()->accept(*this);
+}
 
 void SemanticCheckVisitor::visitSimpleStmtExpr(
     const SimpleStmtExprAST& simpleStmtExpr) {}

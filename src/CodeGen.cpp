@@ -387,6 +387,63 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
     }
     return;
   }
+  case TokenKind::kPlus: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    if (lhsVal == nullptr || rhsVal == nullptr) {
+      llvm::errs() << "Unknown operands in binary expression\n";
+      return;
+    }
+    if (binaryExpr.getLhs()->getTypeInfo() == "str" &&
+        binaryExpr.getRhs()->getTypeInfo() == "str") {
+      // TODO: support string concatenation
+    } else if (binaryExpr.getLhs()->getTypeInfo() == "int" &&
+               binaryExpr.getRhs()->getTypeInfo() == "int") {
+      llvm::Value* sumVal = builder->CreateAdd(lhsVal, rhsVal, "sum_ints");
+      binaryExpr.setCodegenValue(sumVal);
+    } else {
+      llvm::errs() << "Unsupported types for '+' operator\n";
+    }
+    return;
+  }
+  case TokenKind::kMinus: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    llvm::Value* diffVal = builder->CreateSub(lhsVal, rhsVal, "diff_ints");
+    binaryExpr.setCodegenValue(diffVal);
+    return;
+  }
+  case TokenKind::kMul: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    llvm::Value* prodVal = builder->CreateMul(lhsVal, rhsVal, "prod_ints");
+    binaryExpr.setCodegenValue(prodVal);
+    return;
+  }
+  case TokenKind::kIntDiv: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    llvm::Value* divVal = builder->CreateSDiv(lhsVal, rhsVal, "div_ints");
+    binaryExpr.setCodegenValue(divVal);
+    return;
+  }
+  case TokenKind::kMod: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    llvm::Value* modVal = builder->CreateSRem(lhsVal, rhsVal, "mod_ints");
+    binaryExpr.setCodegenValue(modVal);
+    return;
+  }
   }
 }
 

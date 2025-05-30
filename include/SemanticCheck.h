@@ -57,6 +57,7 @@ private:
   }
   std::vector<SemanticError> errors;
   std::vector<std::string> definedClassIds = {"object", "str", "bool", "int"};
+  std::unordered_map<std::string, ClassAST*> definedClasses;
   std::unordered_map<std::string, std::string> globalVarToType;
   std::unordered_map<std::string, std::string> localVarToType;
 
@@ -69,6 +70,17 @@ inline const VarDefAST* lookupAttributeInHierarchy(const ClassAST* clazz,
   while (clazz && clazz->getId() != "object") {
     if (clazz->hasAttribute(attrId)) {
       return clazz->getAttribute(attrId);
+    }
+    clazz = clazz->getParentClass();
+  }
+  return nullptr;
+}
+
+inline const FunctionAST* lookupMethodInHierarchy(const ClassAST* clazz,
+                                                  const std::string& methodId) {
+  while (clazz && clazz->getId() != "object") {
+    if (clazz->hasMethod(methodId)) {
+      return clazz->getMethod(methodId);
     }
     clazz = clazz->getParentClass();
   }
