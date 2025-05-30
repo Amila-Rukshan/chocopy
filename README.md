@@ -4,6 +4,11 @@ This tree is to implement **ChocoPy** language using LLVM compiler infrastructur
 
 See [chocopy.pdf](./chocopy.pdf) for a full description of ChocoPy language with Type Checking and Operational Semantics.
 
+## Related content
+
+### Blog posts
+
+- [Building Dynamic Dispatch in ChocoPy: From Concept to Code](https://developerdiary.me/building-dynamic-dispatch-in-chocopy-from-concept-to-code/)
 
 ## How to run?
 
