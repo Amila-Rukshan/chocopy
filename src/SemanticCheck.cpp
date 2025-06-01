@@ -165,7 +165,9 @@ void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
 
 void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
   if (currentClass == nullptr && currentFunction == nullptr) {
-    idExpr.setTypeInfo(globalVarToType.at(idExpr.getId().str()));
+    if (globalVarToType.find(idExpr.getId().str()) != globalVarToType.end()) {
+      idExpr.setTypeInfo(globalVarToType.at(idExpr.getId().str()));
+    }
   } else if (currentClass != nullptr && currentFunction != nullptr) {
     if (idExpr.getId() == "self") {
       idExpr.setTypeInfo(currentClass->getId().str());
@@ -181,7 +183,7 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
     if (currentClass && currentFunction) {
       auto lhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getLhs());
       auto rhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getRhs());
-      if (lhsId && rhsId && lhsId->getId() == "self" && currentClass) {
+      if (lhsId && rhsId && lhsId->getId() == "self") {
         const VarDefAST* attr =
             lookupAttributeInHierarchy(currentClass, rhsId->getId().str());
         if (attr) {
@@ -213,6 +215,21 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
                 calleeId->loc().line, calleeId->loc().col,
                 "Unknown method: " + calleeId->getId().str() + "\n"));
           }
+        }
+        return;
+      }
+      auto rhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getRhs());
+      if (std::find(definedClassIds.begin(), definedClassIds.end(), lhsType) !=
+              definedClassIds.end() &&
+          rhsId) {
+        const VarDefAST* attr = lookupAttributeInHierarchy(
+            definedClasses[lhsType], rhsId->getId().str());
+        if (attr) {
+          binaryExpr.setTypeInfo(attr->getTypedVar()->getType()->getTypeName());
+        } else {
+          errors.push_back(SemanticError(
+              rhsId->loc().line, rhsId->loc().col,
+              "Unknown attribute: " + rhsId->getId().str() + "\n"));
         }
       }
     }

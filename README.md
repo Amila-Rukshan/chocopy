@@ -12,7 +12,7 @@ See [chocopy.pdf](./chocopy.pdf) for a full description of ChocoPy language with
 
 ## How to run?
 
-A Dev container is setup for linux OS with the llvm dependancies. Just open the project in `VSCode` and from from the Debug window, run `Debug ChocoPy`.
+A Dev container is setup for linux OS with the llvm dependancies. Just open the project in `VSCode` and from the Debug window, run `Debug ChocoPy`.
 
 ## TODOS
 
