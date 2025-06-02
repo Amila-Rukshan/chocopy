@@ -383,8 +383,13 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
               ->getType()
               ->getTypeName();
       llvm::Type* fieldType = llvmTypeOrClassPtrType(fieldTypeName);
-      fieldGEP = builder->CreateLoad(fieldType, fieldGEP, "field_val");
-      binaryExpr.setCodegenValue(fieldGEP);
+      // only load primitive types
+      if (!llvmClass(fieldTypeName)) {
+        fieldGEP = builder->CreateLoad(fieldType, fieldGEP, "field_val");
+        binaryExpr.setCodegenValue(fieldGEP);
+      } else {
+        binaryExpr.setCodegenValue(fieldGEP);
+      }
     }
     return;
   }
@@ -756,7 +761,11 @@ LLVMCodeGenVisitor::llvmClass(const std::string& className) {
 
 inline llvm::StructType*
 LLVMCodeGenVisitor::llvmClass(const ClassAST* classPtr) {
-  return classToStructType.at(classPtr);
+  auto it = classToStructType.find(classPtr);
+  if (it != classToStructType.end()) {
+    return it->second;
+  }
+  return nullptr;
 }
 
 const ClassAST* LLVMCodeGenVisitor::getClassByName(std::string name) const {

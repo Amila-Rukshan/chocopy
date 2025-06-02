@@ -180,58 +180,39 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
   binaryExpr.getRhs()->accept(*this);
   switch (binaryExpr.getOp()) {
   case TokenKind::kAttrAccessOp: {
-    if (currentClass && currentFunction) {
-      auto lhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getLhs());
-      auto rhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getRhs());
-      if (lhsId && rhsId && lhsId->getId() == "self") {
-        const VarDefAST* attr =
-            lookupAttributeInHierarchy(currentClass, rhsId->getId().str());
-        if (attr) {
-          binaryExpr.setTypeInfo(attr->getTypedVar()->getType()->getTypeName());
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getRhs());
+    if (rhsId) {
+      const VarDefAST* attr = lookupAttributeInHierarchy(
+          definedClasses[lhsType], rhsId->getId().str());
+      if (attr) {
+        auto v = attr->getTypedVar()->getType()->getTypeName();
+        binaryExpr.setTypeInfo(attr->getTypedVar()->getType()->getTypeName());
+      } else {
+        errors.push_back(
+            SemanticError(rhsId->loc().line, rhsId->loc().col,
+                          "Unknown attribute: " + rhsId->getId().str() + "\n"));
+      }
+      return;
+    }
+    auto rhsCall = llvm::dyn_cast<CallExprAST>(binaryExpr.getRhs());
+    if (std::find(definedClassIds.begin(), definedClassIds.end(), lhsType) !=
+            definedClassIds.end() &&
+        rhsCall) {
+      auto calleeId = llvm::dyn_cast<IdExprAST>(rhsCall->getCallee());
+      auto classPtr = definedClasses[lhsType];
+      if (calleeId) {
+        const FunctionAST* method =
+            lookupMethodInHierarchy(classPtr, calleeId->getId().str());
+        if (method) {
+          binaryExpr.setTypeInfo(method->getReturnType()->getTypeName());
         } else {
           errors.push_back(SemanticError(
-              rhsId->loc().line, rhsId->loc().col,
-              "Unknown attribute: " + rhsId->getId().str() + "\n"));
+              calleeId->loc().line, calleeId->loc().col,
+              "Unknown method: " + calleeId->getId().str() + "\n"));
         }
       }
-    } else if (!currentClass && !currentFunction) {
-      // check if lhs is  class type and right hand side is a function
-      // call then lookup that method in the class hierarchy and get the return
-      // type
-      auto lhsType = binaryExpr.getLhs()->getTypeInfo();
-      auto rhsCall = llvm::dyn_cast<CallExprAST>(binaryExpr.getRhs());
-      if (std::find(definedClassIds.begin(), definedClassIds.end(), lhsType) !=
-              definedClassIds.end() &&
-          rhsCall) {
-        auto calleeId = llvm::dyn_cast<IdExprAST>(rhsCall->getCallee());
-        auto classPtr = definedClasses[lhsType];
-        if (calleeId) {
-          const FunctionAST* method =
-              lookupMethodInHierarchy(classPtr, calleeId->getId().str());
-          if (method) {
-            binaryExpr.setTypeInfo(method->getReturnType()->getTypeName());
-          } else {
-            errors.push_back(SemanticError(
-                calleeId->loc().line, calleeId->loc().col,
-                "Unknown method: " + calleeId->getId().str() + "\n"));
-          }
-        }
-        return;
-      }
-      auto rhsId = llvm::dyn_cast<IdExprAST>(binaryExpr.getRhs());
-      if (std::find(definedClassIds.begin(), definedClassIds.end(), lhsType) !=
-              definedClassIds.end() &&
-          rhsId) {
-        const VarDefAST* attr = lookupAttributeInHierarchy(
-            definedClasses[lhsType], rhsId->getId().str());
-        if (attr) {
-          binaryExpr.setTypeInfo(attr->getTypedVar()->getType()->getTypeName());
-        } else {
-          errors.push_back(SemanticError(
-              rhsId->loc().line, rhsId->loc().col,
-              "Unknown attribute: " + rhsId->getId().str() + "\n"));
-        }
-      }
+      return;
     }
     return;
   }
