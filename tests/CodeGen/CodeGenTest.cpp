@@ -42,9 +42,10 @@ TEST(CodeGenTest, MultiplePrograms) {
   std::map<std::string, std::string> expectedOutput = {
       {"00", "Hello, World!\n"},
       {"01", "42\n"},
-  };
+      {"02", "12\n"},
+      {"03", "shift using rear wheels\nshift using all wheels\n"}};
 
-  for (int i = 0; i <= 1; ++i) {
+  for (int i = 0; i <= 3; ++i) {
     std::ostringstream oss;
     oss << std::setw(2) << std::setfill('0') << i;
     std::string idx = oss.str();
