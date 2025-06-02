@@ -45,5 +45,16 @@
           "isDefault": true
         }
       },
+      {
+        "label": "Build CodeGen Test (Debug)",
+        "type": "shell",
+        "linux": {
+          "command": "mkdir -p ${workspaceFolder}/build && cd ${workspaceFolder}/build && cmake -G Ninja -DENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug .. && cmake --build . --target CodeGenTest"
+        },
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        }
+      },
     ]
 }

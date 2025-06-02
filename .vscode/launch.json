@@ -10,7 +10,7 @@
             "name": "Debug ChocoPy",
             "preLaunchTask": "Build (Debug)",
             "program": "${workspaceFolder}/build/chocopyc",
-            "args": ["${workspaceFolder}/tests/choco.py"],
+            "args": ["${workspaceFolder}/testprograms/choco.py"],
             "cwd": "${workspaceFolder}"
         },
         {
@@ -18,7 +18,7 @@
             "request": "launch",
             "name": "Lexer Tests",
             "preLaunchTask":  "Build Lexer Test (Debug)",
-            "program": "${workspaceFolder}/build/unittests/Lexer/LexerTest",
+            "program": "${workspaceFolder}/build/tests/Lexer/LexerTest",
             "cwd": "${workspaceFolder}"
         },
         {
@@ -26,7 +26,7 @@
             "request": "launch",
             "name": "Parser Tests",
             "preLaunchTask":  "Build Parser Test (Debug)",
-            "program": "${workspaceFolder}/build/unittests/Parser/ParserTest",
+            "program": "${workspaceFolder}/build/tests/Parser/ParserTest",
             "cwd": "${workspaceFolder}"
         },
         {
@@ -34,7 +34,15 @@
             "request": "launch",
             "name": "Semantic Check Tests",
             "preLaunchTask":  "Build SemanticCheck Test (Debug)",
-            "program": "${workspaceFolder}/build/unittests/SemanticCheck/SemanticCheckTest",
+            "program": "${workspaceFolder}/build/tests/SemanticCheck/SemanticCheckTest",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Code Gen Tests",
+            "preLaunchTask":  "Build CodeGen Test (Debug)",
+            "program": "${workspaceFolder}/build/tests/CodeGen/CodeGenTest",
             "cwd": "${workspaceFolder}"
         },
     ]
