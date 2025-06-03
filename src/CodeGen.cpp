@@ -453,6 +453,31 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
   }
 }
 
+void LLVMCodeGenVisitor::visitUnaryExpr(const UnaryExprAST& unaryExpr) {
+  unaryExpr.getExpr()->accept(*this);
+  llvm::Value* exprVal = unaryExpr.getExpr()->getCodegenValue();
+  if (exprVal == nullptr) {
+    llvm::errs() << "Unknown operand in unary expression\n";
+    return;
+  }
+
+  switch (unaryExpr.getOp()) {
+  case TokenKind::k_not: {
+    llvm::Value* notVal = builder->CreateNot(exprVal, "not_expr_val");
+    unaryExpr.setCodegenValue(notVal);
+    break;
+  }
+  case TokenKind::kMinus: {
+    llvm::Value* negVal = builder->CreateNeg(exprVal, "neg_expr_val");
+    unaryExpr.setCodegenValue(negVal);
+    break;
+  }
+  default:
+    llvm::errs() << "Unknown unary operator\n";
+    return;
+  }
+}
+
 void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
   if (currentClass == nullptr && currentFunction == nullptr) {
     llvm::GlobalVariable* globalVar = globalVariables[idExpr.getId()];

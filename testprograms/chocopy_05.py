@@ -22,6 +22,7 @@ class subwrapper(wrapper):
         
 class container(object):
     w: wrapper = None
+    i: int = 0
     
     def init(self: "container"):
         self.w = subwrapper()

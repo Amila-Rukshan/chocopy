@@ -286,6 +286,40 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
   }
 }
 
+void SemanticCheckVisitor::visitUnaryExpr(const UnaryExprAST& unaryExpr) {
+  unaryExpr.getExpr()->accept(*this);
+  auto exprType = unaryExpr.getExpr()->getTypeInfo();
+  switch (unaryExpr.getOp()) {
+  case TokenKind::k_not: {
+    if (exprType == "bool") {
+      unaryExpr.setTypeInfo("bool");
+    } else {
+      errors.push_back(SemanticError(unaryExpr.loc().line, unaryExpr.loc().col,
+                                     "Unsupported type for 'not' operator: '" +
+                                         exprType + "'\n"));
+    }
+    return;
+  }
+  case TokenKind::kMinus: {
+    if (exprType == "int") {
+      unaryExpr.setTypeInfo("int");
+    } else {
+      errors.push_back(SemanticError(unaryExpr.loc().line, unaryExpr.loc().col,
+                                     "Unsupported type for '-' operator: '" +
+                                         exprType + "'\n"));
+    }
+    return;
+  }
+  default: {
+    errors.push_back(SemanticError(unaryExpr.loc().line, unaryExpr.loc().col,
+                                   "Unknown unary operator: '" +
+                                       tokenKindToString(unaryExpr.getOp()) +
+                                       "'\n"));
+    return;
+  }
+  }
+}
+
 void SemanticCheckVisitor::visitVarDef(const VarDefAST& varDef) {
   varDef.getTypedVar()->accept(*this);
   auto type = varDef.getTypedVar()->getTypeInfo();

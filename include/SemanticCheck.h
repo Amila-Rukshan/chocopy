@@ -41,6 +41,7 @@ public:
   void visitCallExpr(const CallExprAST& callExpr) override;
   void visitIdExpr(const IdExprAST& idExpr) override;
   void visitBinaryExpr(const BinaryExprAST& binaryExpr) override;
+  void visitUnaryExpr(const UnaryExprAST& unaryExpr) override;
   void visitVarDef(const VarDefAST& varDef) override;
   void visitTypedVar(const TypedVarAST& typedVar) override;
   void

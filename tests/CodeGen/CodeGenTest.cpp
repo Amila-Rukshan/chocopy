@@ -46,9 +46,9 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"03", "shift using rear wheels\nshift using all wheels\n"},
       {"04", "100\nTrue\ntest\n"},
       {"05", "77\n201\n100\n"},
-      {"06", "-10\n706\n1080\n4\n2\n"}};
+      {"06", "-10\n34\n706\n1080\n4\n2\n"}};
 
-  for (int i = 0; i <= 4; ++i) {
+  for (int i = 0; i <= 6; ++i) {
     std::ostringstream oss;
     oss << std::setw(2) << std::setfill('0') << i;
     std::string idx = oss.str();
@@ -66,6 +66,9 @@ TEST(CodeGenTest, MultiplePrograms) {
 
     chocopy::SemanticCheckVisitor semanticCheck;
     auto errors = semanticCheck.check(*programAST);
+    for (const auto& err : errors) {
+      std::cerr << filename << err.getErrorMsg();
+    }
     ASSERT_TRUE(errors.empty());
 
     chocopy::LLVMCodeGenVisitor codeGenVisitor(programAST.get(), filename);

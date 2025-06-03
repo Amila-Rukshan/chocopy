@@ -6,6 +6,7 @@ y: int = 56
 z: int = 12
 
 print(x - y + z)
+print(-(x - y) + z)
 
 print(x + y * z)
 print((x + y) * z)
