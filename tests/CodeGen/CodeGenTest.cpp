@@ -41,11 +41,14 @@ std::string readFileToString(const std::string& filename) {
 TEST(CodeGenTest, MultiplePrograms) {
   std::map<std::string, std::string> expectedOutput = {
       {"00", "Hello, World!\n"},
-      {"01", "42\n"},
+      {"01", "42\nTrue\nFalse\n"},
       {"02", "12\n"},
-      {"03", "shift using rear wheels\nshift using all wheels\n"}};
+      {"03", "shift using rear wheels\nshift using all wheels\n"},
+      {"04", "100\nTrue\ntest\n"},
+      {"05", "77\n201\n100\n"},
+      {"06", "-10\n706\n1080\n4\n2\n"}};
 
-  for (int i = 0; i <= 3; ++i) {
+  for (int i = 0; i <= 4; ++i) {
     std::ostringstream oss;
     oss << std::setw(2) << std::setfill('0') << i;
     std::string idx = oss.str();
