@@ -54,6 +54,25 @@ public:
 
   inline std::string typeUnion(const std::string& lhsType,
                                const std::string& rhsType);
+  inline bool isPrimitiveType(const std::string& type) {
+    return std::find(primitiveTypes.begin(), primitiveTypes.end(), type) !=
+           primitiveTypes.end();
+  }
+  inline bool isSubTypeOf(const std::string& subType,
+                             const std::string& superType) {
+    if (subType == superType)
+      return true;
+
+    ClassAST* subClass = definedClasses[subType];
+    ClassAST* superClass = definedClasses[superType];
+
+    while (subClass && subClass->getId() != "object") {
+      if (subClass->getId() == superClass->getId())
+        return true;
+      subClass = const_cast<ClassAST*>(subClass->getParentClass());
+    }
+    return false;
+  }
 
 private:
   bool isDefinedType(const llvm::StringRef typeName) {

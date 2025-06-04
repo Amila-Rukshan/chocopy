@@ -161,6 +161,13 @@ void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
   for (const auto& arg : callExpr.getArgs()) {
     arg->accept(*this);
   }
+  if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
+    if (auto classPtr = definedClasses[callee->getId().str()]) {
+      callExpr.setTypeInfo(classPtr->getId().str());
+    }
+  } else {
+    // TODO: look for function in current class or global scope
+  }
 }
 
 void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
@@ -413,12 +420,8 @@ void SemanticCheckVisitor::visitIfElseExpr(const IfElseExprAST& ifElseExpr) {
   auto ifBodyType = ifElseExpr.getIfBody()->getTypeInfo();
   auto elseBodyType = ifElseExpr.getElseBody()->getTypeInfo();
 
-  bool ifIsPrimitive = std::find(primitiveTypes.begin(), primitiveTypes.end(),
-                                 ifBodyType) != primitiveTypes.end();
-  bool elseIsPrimitive = std::find(primitiveTypes.begin(), primitiveTypes.end(),
-                                   elseBodyType) != primitiveTypes.end();
-
-  if ((ifIsPrimitive || elseIsPrimitive) && ifBodyType != elseBodyType) {
+  if ((isPrimitiveType(ifBodyType) || isPrimitiveType(elseBodyType)) &&
+      ifBodyType != elseBodyType) {
     errors.push_back(SemanticError(
         ifElseExpr.loc().line, ifElseExpr.loc().col,
         "If and else bodies must have the same primitive type, found '" +
@@ -536,11 +539,19 @@ void SemanticCheckVisitor::visitSimpleStmtAssign(
   auto rhsType = simpleStmtAssign.getRhs()->getTypeInfo();
   for (const auto& target : simpleStmtAssign.getTargets()) {
     auto targetType = target->getTypeInfo();
-    if (targetType != rhsType) {
+    if (isPrimitiveType(targetType) && isPrimitiveType(rhsType) &&
+        targetType != rhsType) {
       errors.push_back(SemanticError(target->loc().line, target->loc().col,
                                      "Type mismatch: cannot assign '" +
                                          rhsType + "' to '" + targetType +
                                          "'\n"));
+    } else {
+      if (!isSubTypeOf(rhsType, targetType)) {
+        errors.push_back(SemanticError(target->loc().line, target->loc().col,
+                                       "Type mismatch: cannot assign '" +
+                                           rhsType + "' to '" + targetType +
+                                           "'\n"));
+      }
     }
   }
 }
