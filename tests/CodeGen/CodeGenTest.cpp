@@ -46,9 +46,10 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"03", "shift using rear wheels\nshift using all wheels\n"},
       {"04", "100\nTrue\ntest\n"},
       {"05", "77\n201\n100\n"},
-      {"06", "-10\n34\n706\n1080\n4\n2\n"}};
+      {"06", "-10\n34\n706\n1080\n4\n2\n"},
+      {"07", "False\nFalse\nTrue\nFalse\n"}};
 
-  for (int i = 0; i <= 6; ++i) {
+  for (int i = 0; i <= 7; ++i) {
     std::ostringstream oss;
     oss << std::setw(2) << std::setfill('0') << i;
     std::string idx = oss.str();

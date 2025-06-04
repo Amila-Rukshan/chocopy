@@ -268,6 +268,17 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
                         "Unsupported types for '//' operator: '" + lhsType +
                             "' and '" + rhsType + "'\n"));
     }
+    auto lhsLiteral = llvm::dyn_cast<LiteralExprAST>(binaryExpr.getRhs());
+    if (lhsLiteral) {
+      if (auto lhsNumberLiteral =
+              llvm::dyn_cast<LiteralNumberAST>(lhsLiteral->getLiteral())) {
+        if (lhsNumberLiteral->getNumber() == 0) {
+          errors.push_back(
+              SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
+                            "Division by zero in '//' operator\n"));
+        }
+      }
+    }
     return;
   }
   case TokenKind::kMod: {
@@ -280,6 +291,73 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
           SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
                         "Unsupported types for '%' operator: '" + lhsType +
                             "' and '" + rhsType + "'\n"));
+    }
+    auto lhsLiteral = llvm::dyn_cast<LiteralExprAST>(binaryExpr.getRhs());
+    if (lhsLiteral) {
+      if (auto lhsNumberLiteral =
+              llvm::dyn_cast<LiteralNumberAST>(lhsLiteral->getLiteral())) {
+        if (lhsNumberLiteral->getNumber() == 0) {
+          errors.push_back(
+              SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
+                            "Division by zero in '//' operator\n"));
+        }
+      }
+    }
+    return;
+  }
+  case TokenKind::kEqual: {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (lhsType == rhsType && (lhsType == "bool" || lhsType == "int")) {
+      binaryExpr.setTypeInfo("bool");
+    } else {
+      errors.push_back(
+          SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
+                        "Unsupported types for '==' operator: '" + lhsType +
+                            "' and '" + rhsType + "'\n"));
+    }
+    return;
+  }
+  case TokenKind::kInEqual: {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (lhsType == rhsType && (lhsType == "bool" || lhsType == "int")) {
+      binaryExpr.setTypeInfo("bool");
+    } else {
+      errors.push_back(
+          SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
+                        "Unsupported types for '!=' operator: '" + lhsType +
+                            "' and '" + rhsType + "'\n"));
+    }
+    return;
+  }
+  case TokenKind::kLessThan:
+  case TokenKind::kGreaterThan:
+  case TokenKind::kLessThanOrEqual:
+  case TokenKind::kGreaterThanOrEqual: {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (lhsType == "int" && rhsType == "int") {
+      binaryExpr.setTypeInfo("bool");
+    } else {
+      errors.push_back(
+          SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
+                        "Unsupported types for comparison operator: '" +
+                            lhsType + "' and '" + rhsType + "'\n"));
+    }
+    return;
+  }
+  case TokenKind::k_and:
+  case TokenKind::k_or: {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (lhsType == "bool" && rhsType == "bool") {
+      binaryExpr.setTypeInfo("bool");
+    } else {
+      errors.push_back(SemanticError(
+          binaryExpr.loc().line, binaryExpr.loc().col,
+          "Unsupported types for '" + tokenKindToString(binaryExpr.getOp()) +
+              "' operator: '" + lhsType + "' and '" + rhsType + "'\n"));
     }
     return;
   }

@@ -450,6 +450,115 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
     binaryExpr.setCodegenValue(modVal);
     return;
   }
+  case TokenKind::kLessThan: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    if (lhsVal == nullptr || rhsVal == nullptr) {
+      llvm::errs() << "Unknown operands in binary expression\n";
+      return;
+    }
+    llvm::Value* cmpVal =
+        builder->CreateICmpSLT(lhsVal, rhsVal, "cmp_less_than");
+    binaryExpr.setCodegenValue(cmpVal);
+    return;
+  }
+  case TokenKind::kGreaterThan: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    if (lhsVal == nullptr || rhsVal == nullptr) {
+      llvm::errs() << "Unknown operands in binary expression\n";
+      return;
+    }
+    llvm::Value* cmpVal =
+        builder->CreateICmpSGT(lhsVal, rhsVal, "cmp_greater_than");
+    binaryExpr.setCodegenValue(cmpVal);
+    return;
+  }
+  case TokenKind::kLessThanOrEqual: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    if (lhsVal == nullptr || rhsVal == nullptr) {
+      llvm::errs() << "Unknown operands in binary expression\n";
+      return;
+    }
+    llvm::Value* cmpVal =
+        builder->CreateICmpSLE(lhsVal, rhsVal, "cmp_less_than_or_equal");
+    binaryExpr.setCodegenValue(cmpVal);
+    return;
+  }
+  case TokenKind::kGreaterThanOrEqual: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    if (lhsVal == nullptr || rhsVal == nullptr) {
+      llvm::errs() << "Unknown operands in binary expression\n";
+      return;
+    }
+    llvm::Value* cmpVal =
+        builder->CreateICmpSGE(lhsVal, rhsVal, "cmp_greater_than_or_equal");
+    binaryExpr.setCodegenValue(cmpVal);
+    return;
+  }
+  case TokenKind::k_and: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    if (lhsVal == nullptr || rhsVal == nullptr) {
+      llvm::errs() << "Unknown operands in binary expression\n";
+      return;
+    }
+    llvm::Value* andVal = builder->CreateAnd(lhsVal, rhsVal, "and_expr_val");
+    binaryExpr.setCodegenValue(andVal);
+    return;
+  }
+  case TokenKind::k_or: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    if (lhsVal == nullptr || rhsVal == nullptr) {
+      llvm::errs() << "Unknown operands in binary expression\n";
+      return;
+    }
+    llvm::Value* orVal = builder->CreateOr(lhsVal, rhsVal, "or_expr_val");
+    binaryExpr.setCodegenValue(orVal);
+    return;
+  }
+  case TokenKind::kEqual: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    if (lhsVal == nullptr || rhsVal == nullptr) {
+      llvm::errs() << "Unknown operands in binary expression\n";
+      return;
+    }
+    llvm::Value* eqVal = builder->CreateICmpEQ(lhsVal, rhsVal, "cmp_equal");
+    binaryExpr.setCodegenValue(eqVal);
+    return;
+  }
+  case TokenKind::kInEqual: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    if (lhsVal == nullptr || rhsVal == nullptr) {
+      llvm::errs() << "Unknown operands in binary expression\n";
+      return;
+    }
+    llvm::Value* neqVal =
+        builder->CreateICmpNE(lhsVal, rhsVal, "cmp_not_equal");
+    binaryExpr.setCodegenValue(neqVal);
+    return;
+  }
   }
 }
 
