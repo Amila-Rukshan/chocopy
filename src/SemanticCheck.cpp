@@ -299,7 +299,7 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
         if (lhsNumberLiteral->getNumber() == 0) {
           errors.push_back(
               SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
-                            "Division by zero in '//' operator\n"));
+                            "Division by zero in '%' operator\n"));
         }
       }
     }

@@ -200,4 +200,30 @@ k = i % "devider"
             ":10:7: Unsupported types for '%' operator: 'int' and 'str'\n");
 }
 
+TEST(SemanticCheckTest, TestDivisionByZero) {
+  std::string program = R"(
+i:int = 1
+k: int = 0
+k = i // 0
+
+k = i % 0
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  chocopy::Parser parser(lexer);
+  std::unique_ptr<chocopy::ProgramAST> programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+
+  chocopy::SemanticCheckVisitor semanticCheck;
+  auto errors = semanticCheck.check(*programAST);
+
+  ASSERT_FALSE(errors.empty());
+  ASSERT_EQ(errors.size(), 2);
+  ASSERT_EQ(errors[0].getErrorMsg(),
+            ":4:7: Division by zero in '//' operator\n");
+  ASSERT_EQ(errors[1].getErrorMsg(),
+            ":6:7: Division by zero in '%' operator\n");
+}
+
 } // namespace chocopy
