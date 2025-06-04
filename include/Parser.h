@@ -413,6 +413,7 @@ private:
     }
 
     if (lexer.getCurToken() == TokenKind::k_if) {
+      auto ifLocation = lexer.getLastLocation();
       lexer.getNextToken();
       auto condition = parseExpr();
       if (!condition) {
@@ -423,9 +424,9 @@ private:
       if (!elseExpr) {
         return parseError<ExprAST>("expression", "after 'else'");
       }
-      lhs = std::make_unique<IfElseExprAST>(
-          lexer.getLastLocation(), std::move(lhs), std::move(condition),
-          std::move(elseExpr));
+      lhs =
+          std::make_unique<IfElseExprAST>(ifLocation, std::move(condition),
+                                          std::move(lhs), std::move(elseExpr));
     }
 
     return lhs;

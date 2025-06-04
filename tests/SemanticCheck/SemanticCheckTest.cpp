@@ -170,11 +170,11 @@ i:int = 1
 b: bool = True
 k: int = 0
 
-k = i + b
-k = i - False
-k = "str" * i
-k = i // True
-k = i % "devider"
+print(i + b)
+print(i - False)
+print("str" * i)
+print(i // True)
+print(i % "devider")
 )";
 
   LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
@@ -189,15 +189,15 @@ k = i % "devider"
   ASSERT_FALSE(errors.empty());
   ASSERT_EQ(errors.size(), 5);
   ASSERT_EQ(errors[0].getErrorMsg(),
-            ":6:7: Unsupported types for '+' operator: 'int' and 'bool'\n");
+            ":6:9: Unsupported types for '+' operator: 'int' and 'bool'\n");
   ASSERT_EQ(errors[1].getErrorMsg(),
-            ":7:7: Unsupported types for '-' operator: 'int' and 'bool'\n");
+            ":7:9: Unsupported types for '-' operator: 'int' and 'bool'\n");
   ASSERT_EQ(errors[2].getErrorMsg(),
-            ":8:11: Unsupported types for '*' operator: 'str' and 'int'\n");
+            ":8:13: Unsupported types for '*' operator: 'str' and 'int'\n");
   ASSERT_EQ(errors[3].getErrorMsg(),
-            ":9:7: Unsupported types for '//' operator: 'int' and 'bool'\n");
+            ":9:9: Unsupported types for '//' operator: 'int' and 'bool'\n");
   ASSERT_EQ(errors[4].getErrorMsg(),
-            ":10:7: Unsupported types for '%' operator: 'int' and 'str'\n");
+            ":10:9: Unsupported types for '%' operator: 'int' and 'str'\n");
 }
 
 TEST(SemanticCheckTest, TestDivisionByZero) {
@@ -224,6 +224,32 @@ k = i % 0
             ":4:7: Division by zero in '//' operator\n");
   ASSERT_EQ(errors[1].getErrorMsg(),
             ":6:7: Division by zero in '%' operator\n");
+}
+
+TEST(SemanticCheckTest, TestIfElseExpression) {
+  std::string program = R"(
+a: bool = True
+z: int = 0
+z = 1 if a else 2
+z = 1 if a else "str"
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  chocopy::Parser parser(lexer);
+  std::unique_ptr<chocopy::ProgramAST> programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+
+  chocopy::SemanticCheckVisitor semanticCheck;
+  auto errors = semanticCheck.check(*programAST);
+
+  ASSERT_FALSE(errors.empty());
+  ASSERT_EQ(errors.size(), 2);
+  ASSERT_EQ(errors[0].getErrorMsg(),
+            ":5:7: If and else bodies must have the same primitive type, found "
+            "'int' and 'str'\n");
+  ASSERT_EQ(errors[1].getErrorMsg(),
+            ":5:3: Type mismatch: cannot assign 'object' to 'int'\n");
 }
 
 } // namespace chocopy

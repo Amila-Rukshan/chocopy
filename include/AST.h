@@ -37,6 +37,8 @@ class SimpleStmtAssignAST;
 class SimpleStmtExprAST;
 class SimpleStmtReturnAST;
 
+class IfElseExprAST;
+
 class ASTVisitor {
 public:
   virtual ~ASTVisitor() = default;
@@ -63,6 +65,7 @@ public:
   virtual void visitSimpleStmtExpr(const SimpleStmtExprAST& simpleStmtExpr) = 0;
   virtual void
   visitSimpleStmtReturn(const SimpleStmtReturnAST& simpleStmtReturn) = 0;
+  virtual void visitIfElseExpr(const IfElseExprAST& ifElseExpr) = 0;
 };
 
 /***********************************/
@@ -744,7 +747,9 @@ public:
   const ExprAST* getIfBody() const { return ifBody.get(); }
   const ExprAST* getElseBody() const { return elseBody.get(); }
 
-  void accept(ASTVisitor& visitor) const override {}
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitIfElseExpr(*this);
+  }
 
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {

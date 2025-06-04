@@ -46,6 +46,7 @@ public:
   void visitSimpleStmtExpr(const SimpleStmtExprAST& simpleStmtExpr) override;
   void
   visitSimpleStmtReturn(const SimpleStmtReturnAST& simpleStmtReturn) override;
+  void visitIfElseExpr(const IfElseExprAST& ifElseExpr) override;
 
 private:
   void createBuiltinFuncDecl(const std::string& funcName,

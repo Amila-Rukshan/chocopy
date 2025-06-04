@@ -297,9 +297,9 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       if (auto lhsNumberLiteral =
               llvm::dyn_cast<LiteralNumberAST>(lhsLiteral->getLiteral())) {
         if (lhsNumberLiteral->getNumber() == 0) {
-          errors.push_back(
-              SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
-                            "Division by zero in '%' operator\n"));
+          errors.push_back(SemanticError(binaryExpr.loc().line,
+                                         binaryExpr.loc().col,
+                                         "Division by zero in '%' operator\n"));
         }
       }
     }
@@ -398,6 +398,61 @@ void SemanticCheckVisitor::visitUnaryExpr(const UnaryExprAST& unaryExpr) {
   }
 }
 
+void SemanticCheckVisitor::visitIfElseExpr(const IfElseExprAST& ifElseExpr) {
+  ifElseExpr.getCondition()->accept(*this);
+  auto conditionType = ifElseExpr.getCondition()->getTypeInfo();
+  if (conditionType != "bool") {
+    errors.push_back(SemanticError(ifElseExpr.loc().line, ifElseExpr.loc().col,
+                                   "Condition must be of type 'bool', found '" +
+                                       conditionType + "'\n"));
+  }
+  ifElseExpr.getIfBody()->accept(*this);
+  if (ifElseExpr.getElseBody()) {
+    ifElseExpr.getElseBody()->accept(*this);
+  }
+  auto ifBodyType = ifElseExpr.getIfBody()->getTypeInfo();
+  auto elseBodyType = ifElseExpr.getElseBody()->getTypeInfo();
+
+  bool ifIsPrimitive = std::find(primitiveTypes.begin(), primitiveTypes.end(),
+                                 ifBodyType) != primitiveTypes.end();
+  bool elseIsPrimitive = std::find(primitiveTypes.begin(), primitiveTypes.end(),
+                                   elseBodyType) != primitiveTypes.end();
+
+  if ((ifIsPrimitive || elseIsPrimitive) && ifBodyType != elseBodyType) {
+    errors.push_back(SemanticError(
+        ifElseExpr.loc().line, ifElseExpr.loc().col,
+        "If and else bodies must have the same primitive type, found '" +
+            ifBodyType + "' and '" + elseBodyType + "'\n"));
+  }
+
+  auto type = typeUnion(ifBodyType, elseBodyType);
+  ifElseExpr.setTypeInfo(type);
+}
+
+std::string SemanticCheckVisitor::typeUnion(const std::string& lhsType,
+                                            const std::string& rhsType) {
+  if (lhsType == "int" && rhsType == "int")
+    return "int";
+  else if (lhsType == "bool" && rhsType == "bool")
+    return "bool";
+  else if (lhsType == "str" && rhsType == "str")
+    return "str";
+
+  // Find the least common ancestor in the class hierarchy
+  ClassAST* lhsClass = definedClasses[lhsType];
+  ClassAST* rhsClass = definedClasses[rhsType];
+
+  // Traverse up the hierarchy to find the least common ancestor
+  while (lhsClass && rhsClass) {
+    if (lhsClass->getId() == rhsClass->getId()) {
+      return lhsClass->getId().str();
+    }
+    lhsClass = const_cast<ClassAST*>(lhsClass->getParentClass());
+    rhsClass = const_cast<ClassAST*>(rhsClass->getParentClass());
+  }
+  return "object";
+}
+
 void SemanticCheckVisitor::visitVarDef(const VarDefAST& varDef) {
   varDef.getTypedVar()->accept(*this);
   auto type = varDef.getTypedVar()->getTypeInfo();
@@ -476,6 +531,18 @@ void SemanticCheckVisitor::visitSimpleStmtAssign(
     target->accept(*this);
   }
   simpleStmtAssign.getRhs()->accept(*this);
+  // Check if the right-hand side expression is compatible with the
+  // left-hand side targets
+  auto rhsType = simpleStmtAssign.getRhs()->getTypeInfo();
+  for (const auto& target : simpleStmtAssign.getTargets()) {
+    auto targetType = target->getTypeInfo();
+    if (targetType != rhsType) {
+      errors.push_back(SemanticError(target->loc().line, target->loc().col,
+                                     "Type mismatch: cannot assign '" +
+                                         rhsType + "' to '" + targetType +
+                                         "'\n"));
+    }
+  }
 }
 
 void SemanticCheckVisitor::visitSimpleStmtExpr(

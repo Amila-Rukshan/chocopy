@@ -587,6 +587,44 @@ void LLVMCodeGenVisitor::visitUnaryExpr(const UnaryExprAST& unaryExpr) {
   }
 }
 
+void LLVMCodeGenVisitor::visitIfElseExpr(const IfElseExprAST& ifElseExpr) {
+  ifElseExpr.getCondition()->accept(*this);
+  llvm::Value* condVal = ifElseExpr.getCondition()->getCodegenValue();
+  if (!condVal) {
+    llvm::errs() << "Unknown condition in if-else expression\n";
+    return;
+  }
+
+  llvm::Function* currentFunc = builder->GetInsertBlock()->getParent();
+  llvm::BasicBlock* thenBlock =
+      llvm::BasicBlock::Create(*context, "then", currentFunc);
+  llvm::BasicBlock* elseBlock =
+      llvm::BasicBlock::Create(*context, "else", currentFunc);
+  llvm::BasicBlock* mergeBlock =
+      llvm::BasicBlock::Create(*context, "if_merge", currentFunc);
+
+  builder->CreateCondBr(condVal, thenBlock, elseBlock);
+
+  builder->SetInsertPoint(thenBlock);
+  ifElseExpr.getIfBody()->accept(*this);
+  llvm::Value* thenVal = ifElseExpr.getIfBody()->getCodegenValue();
+  builder->CreateBr(mergeBlock);
+  thenBlock = builder->GetInsertBlock();
+
+  builder->SetInsertPoint(elseBlock);
+  ifElseExpr.getElseBody()->accept(*this);
+  llvm::Value* elseVal = ifElseExpr.getElseBody()->getCodegenValue();
+  builder->CreateBr(mergeBlock);
+  elseBlock = builder->GetInsertBlock();
+
+  builder->SetInsertPoint(mergeBlock);
+  llvm::PHINode* phi = builder->CreatePHI(thenVal->getType(), 2, "if_expr_val");
+  phi->addIncoming(thenVal, thenBlock);
+  phi->addIncoming(elseVal, elseBlock);
+
+  ifElseExpr.setCodegenValue(phi);
+}
+
 void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
   if (currentClass == nullptr && currentFunction == nullptr) {
     llvm::GlobalVariable* globalVar = globalVariables[idExpr.getId()];

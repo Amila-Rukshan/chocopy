@@ -50,6 +50,10 @@ public:
   void
   visitSimpleStmtAssign(const SimpleStmtAssignAST& simpleStmtAssign) override;
   void visitSimpleStmtExpr(const SimpleStmtExprAST& simpleStmtExpr) override;
+  void visitIfElseExpr(const IfElseExprAST& ifElseExpr) override;
+
+  inline std::string typeUnion(const std::string& lhsType,
+                               const std::string& rhsType);
 
 private:
   bool isDefinedType(const llvm::StringRef typeName) {
@@ -58,6 +62,7 @@ private:
   }
   std::vector<SemanticError> errors;
   std::vector<std::string> definedClassIds = {"object", "str", "bool", "int"};
+  std::vector<std::string> primitiveTypes = {"str", "bool", "int"};
   std::unordered_map<std::string, ClassAST*> definedClasses;
   std::unordered_map<std::string, std::string> globalVarToType;
   std::unordered_map<std::string, std::string> localVarToType;

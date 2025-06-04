@@ -47,9 +47,10 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"04", "100\nTrue\ntest\n"},
       {"05", "77\n201\n100\n"},
       {"06", "-10\n34\n706\n1080\n4\n2\n"},
-      {"07", "False\nFalse\nTrue\nFalse\n"}};
+      {"07", "False\nFalse\nTrue\nFalse\n"},
+      {"08", "10\nDriving SUV\n"}};
 
-  for (int i = 0; i <= 7; ++i) {
+  for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;
     oss << std::setw(2) << std::setfill('0') << i;
     std::string idx = oss.str();
