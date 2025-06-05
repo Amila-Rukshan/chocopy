@@ -48,6 +48,8 @@ public:
   visitSimpleStmtReturn(const SimpleStmtReturnAST& simpleStmtReturn) override;
   void visitIfElseExpr(const IfElseExprAST& ifElseExpr) override;
 
+  void visitStmtIf(const StmtIfAST& stmtIf) override;
+
 private:
   void createBuiltinFuncDecl(const std::string& funcName,
                              const std::string& returnType,
@@ -97,6 +99,9 @@ private:
 
   llvm::Constant* getOrCreateGlobalFmtStr(const std::string& str,
                                           const std::string& name);
+
+  inline std::vector<llvm::BasicBlock*>
+  getUnterminatedBlocks(llvm::Function* func);
 
   std::unordered_map<
       const ClassAST*,

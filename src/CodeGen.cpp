@@ -643,7 +643,19 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
       idExpr.setCodegenValue(globalVar);
     }
   } else if (currentClass != nullptr && currentFunction != nullptr) {
-    idExpr.setCodegenValue(localVariables[idExpr.getId()]);
+    if (idExpr.getId() == "self") {
+      idExpr.setCodegenValue(localVariables[idExpr.getId()]);
+    } else {
+      llvm::Value* localVar = localVariables[idExpr.getId()];
+      if (localVar == nullptr) {
+        llvm::errs() << "Unknown local variable: " << idExpr.getId() << "\n";
+        return;
+      }
+      llvm::Value* localVarVal = builder->CreateLoad(
+          static_cast<llvm::AllocaInst*>(localVar)->getAllocatedType(),
+          localVar, "local_var_val");
+      idExpr.setCodegenValue(localVarVal);
+    }
   }
 }
 
@@ -798,6 +810,79 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
 
 void LLVMCodeGenVisitor::visitSimpleStmtExpr(
     const SimpleStmtExprAST& simpleStmtExpr) {}
+
+std::vector<llvm::BasicBlock*>
+LLVMCodeGenVisitor::getUnterminatedBlocks(llvm::Function* func) {
+  std::vector<llvm::BasicBlock*> result;
+  for (auto& block : *func) {
+    if (!block.getTerminator()) {
+      result.push_back(&block);
+    }
+  }
+  return result;
+}
+
+void LLVMCodeGenVisitor::visitStmtIf(const StmtIfAST& stmtIf) {
+  stmtIf.getCondition()->accept(*this);
+  llvm::Value* condVal = stmtIf.getCondition()->getCodegenValue();
+  if (!condVal) {
+    llvm::errs() << "Unknown condition in if statement\n";
+    return;
+  }
+
+  llvm::Function* currentFunc = builder->GetInsertBlock()->getParent();
+  llvm::BasicBlock* thenBlock =
+      llvm::BasicBlock::Create(*context, "if_then", currentFunc);
+  llvm::BasicBlock* elseBlock = nullptr;
+  llvm::BasicBlock* mergeBlock =
+      llvm::BasicBlock::Create(*context, "if_merge", currentFunc);
+
+  if (!stmtIf.getElseBody().empty()) {
+    elseBlock = llvm::BasicBlock::Create(*context, "if_else", currentFunc);
+    builder->CreateCondBr(condVal, thenBlock, elseBlock);
+  } else {
+    builder->CreateCondBr(condVal, thenBlock, mergeBlock);
+  }
+
+  // THEN branch
+  builder->SetInsertPoint(thenBlock);
+  for (const auto& stmt : stmtIf.getBody()) {
+    stmt->accept(*this);
+  }
+  auto thenUnterminated = getUnterminatedBlocks(currentFunc);
+
+  // ELSE branch (if present)
+  std::vector<llvm::BasicBlock*> elseUnterminated;
+  if (elseBlock) {
+    builder->SetInsertPoint(elseBlock);
+    for (const auto& stmt : stmtIf.getElseBody()) {
+      stmt->accept(*this);
+    }
+    elseUnterminated = getUnterminatedBlocks(currentFunc);
+  }
+
+  // Only create branches to merge if needed
+  bool needMerge =
+      !thenUnterminated.empty() || !elseUnterminated.empty() || !elseBlock;
+  if (needMerge) {
+    for (auto* block : thenUnterminated) {
+      if (block == mergeBlock)
+        continue;
+      builder->SetInsertPoint(block);
+      if (!block->getTerminator())
+        builder->CreateBr(mergeBlock);
+    }
+    for (auto* block : elseUnterminated) {
+      if (block == mergeBlock)
+        continue;
+      builder->SetInsertPoint(block);
+      if (!block->getTerminator())
+        builder->CreateBr(mergeBlock);
+    }
+    builder->SetInsertPoint(mergeBlock);
+    // Emit code for after the if-statement here, if any.
+  }
+}
 
 void LLVMCodeGenVisitor::visitSimpleStmtReturn(
     const SimpleStmtReturnAST& simpleStmtReturn) {

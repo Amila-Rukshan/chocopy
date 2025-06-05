@@ -178,6 +178,12 @@ void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
   } else if (currentClass != nullptr && currentFunction != nullptr) {
     if (idExpr.getId() == "self") {
       idExpr.setTypeInfo(currentClass->getId().str());
+    } else if (localVarToType.find(idExpr.getId().str()) !=
+               localVarToType.end()) {
+      idExpr.setTypeInfo(localVarToType.at(idExpr.getId().str()));
+    } else if (globalVarToType.find(idExpr.getId().str()) !=
+               globalVarToType.end()) {
+      idExpr.setTypeInfo(globalVarToType.at(idExpr.getId().str()));
     }
   }
 }
@@ -558,6 +564,25 @@ void SemanticCheckVisitor::visitSimpleStmtAssign(
 
 void SemanticCheckVisitor::visitSimpleStmtExpr(
     const SimpleStmtExprAST& simpleStmtExpr) {}
+
+void SemanticCheckVisitor::visitStmtIf(const StmtIfAST& stmtIf) {
+  stmtIf.getCondition()->accept(*this);
+  auto conditionType = stmtIf.getCondition()->getTypeInfo();
+  if (conditionType != "bool") {
+    errors.push_back(SemanticError(
+        stmtIf.getCondition()->loc().line, stmtIf.getCondition()->loc().col,
+        "Condition must be of type 'bool', found '" + conditionType + "'\n"));
+  }
+  for (const auto& ifBodyStmt : stmtIf.getBody()) {
+    ifBodyStmt->accept(*this);
+  }
+  for (const auto& elIfBlock : stmtIf.getElifs()) {
+    elIfBlock->accept(*this);
+  }
+  for (const auto& elseBodyStmt : stmtIf.getElseBody()) {
+    elseBodyStmt->accept(*this);
+  }
+}
 
 void SemanticCheckVisitor::visitSimpleStmtReturn(
     const SimpleStmtReturnAST& simpleStmtReturn) {
