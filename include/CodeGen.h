@@ -110,6 +110,8 @@ private:
       classFieldGEPMap;
 
   std::unordered_map<std::string, llvm::GlobalVariable*> stringLiteralMap;
+
+  std::vector<llvm::BasicBlock*> excludeBlockStack;
 };
 
 class VirtualTable {

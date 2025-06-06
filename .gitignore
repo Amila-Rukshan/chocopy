@@ -8,3 +8,5 @@ makenoise.py
 test.py
 class.cpp.md
 .DS_Store
+tests-choco
+/testprograms/chco.py.ll

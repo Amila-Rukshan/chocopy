@@ -155,6 +155,7 @@ void SemanticCheckVisitor::visitLiteralString(
 }
 
 void SemanticCheckVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
+  literalNone.setTypeInfo("<None>");
 };
 
 void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
@@ -371,6 +372,19 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
           binaryExpr.loc().line, binaryExpr.loc().col,
           "Unsupported types for '" + tokenKindToString(binaryExpr.getOp()) +
               "' operator: '" + lhsType + "' and '" + rhsType + "'\n"));
+    }
+    return;
+  }
+  case TokenKind::k_is: {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (!isPrimitiveType(lhsType) && !isPrimitiveType(lhsType)) {
+      binaryExpr.setTypeInfo("bool");
+    } else {
+      errors.push_back(
+          SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
+                        "Unsupported types for 'is' operator: '" + lhsType +
+                            "' and '" + rhsType + "'\n"));
     }
     return;
   }

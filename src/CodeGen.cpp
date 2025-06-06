@@ -312,8 +312,8 @@ void LLVMCodeGenVisitor::visitLiteralString(
 }
 
 void LLVMCodeGenVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
-  llvm::Value* codegenValue = nullptr;
-  literalNone.setCodegenValue(codegenValue);
+  literalNone.setCodegenValue(llvm::ConstantPointerNull::get(
+      llvmTypeOrClassPtrType("object")->getPointerTo()));
 }
 
 void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
@@ -559,6 +559,27 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
     binaryExpr.setCodegenValue(neqVal);
     return;
   }
+  case TokenKind::k_is: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    if (lhsVal == nullptr || rhsVal == nullptr) {
+      llvm::errs() << "Unknown operands in 'is' expression\n";
+      return;
+    }
+    if (llvmClass(binaryExpr.getLhs()->getTypeInfo())) {
+      lhsVal = builder->CreateLoad(lhsVal->getType()->getPointerTo(), lhsVal,
+                                   "lhs_loaded");
+    }
+    if (llvmClass(binaryExpr.getRhs()->getTypeInfo())) {
+      rhsVal = builder->CreateLoad(rhsVal->getType()->getPointerTo(), rhsVal,
+                                   "rhs_loaded");
+    }
+    llvm::Value* isVal = builder->CreateICmpEQ(lhsVal, rhsVal, "is_expr_val");
+    binaryExpr.setCodegenValue(isVal);
+    return;
+  }
   }
 }
 
@@ -673,12 +694,12 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
 
       if (argType == "str") {
         llvm::Function* putsFunc = module->getFunction("puts");
-        builder->CreateCall(putsFunc, {argVal});
+        builder->CreateCall(putsFunc, {argVal}, "print_call");
       } else if (argType == "int") {
         llvm::Constant* fmtStr = getOrCreateGlobalFmtStr("%d\n", ".fmt_int");
         llvm::Function* printfFunc = module->getFunction("printf");
         llvm::Value* intVal = argVal;
-        builder->CreateCall(printfFunc, {fmtStr, intVal});
+        builder->CreateCall(printfFunc, {fmtStr, intVal}, "print_call");
       } else if (argType == "bool") {
         llvm::Constant* trueStr = getOrCreateGlobalFmtStr("True", ".fmt_true");
         llvm::Constant* falseStr =
@@ -688,10 +709,10 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
             builder->CreateICmpEQ(argVal, llvm::ConstantInt::getTrue(*context));
         llvm::Value* strToPrint =
             builder->CreateSelect(boolCond, trueStr, falseStr);
-        builder->CreateCall(putsFunc, {strToPrint});
+        builder->CreateCall(putsFunc, {strToPrint}, "print_call");
       } else {
         llvm::Function* putsFunc = module->getFunction("puts");
-        builder->CreateCall(putsFunc, {argVal});
+        builder->CreateCall(putsFunc, {argVal}, "print_call");
       }
       return;
     } else if (auto classPtr = getClassByName(callee->getId().str())) {
@@ -701,7 +722,8 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
       llvm::Value* mallocSize =
           llvm::ConstantInt::get(*context, llvm::APInt(32, structSize));
       calleeFunc = module->getFunction("malloc");
-      llvm::Value* mallocCall = builder->CreateCall(calleeFunc, mallocSize);
+      llvm::Value* mallocCall =
+          builder->CreateCall(calleeFunc, mallocSize, "malloc_call");
       llvm::Value* bitcast = builder->CreateBitCast(
           mallocCall, llvmClass(callee->getId().str())->getPointerTo());
 
@@ -813,13 +835,17 @@ void LLVMCodeGenVisitor::visitSimpleStmtExpr(
 
 std::vector<llvm::BasicBlock*>
 LLVMCodeGenVisitor::getUnterminatedBlocks(llvm::Function* func) {
-  std::vector<llvm::BasicBlock*> result;
+  auto isExcluded = [&](llvm::BasicBlock* block) {
+    return std::find(excludeBlockStack.begin(), excludeBlockStack.end(),
+                     block) != excludeBlockStack.end();
+  };
+  std::vector<llvm::BasicBlock*> unterminated;
   for (auto& block : *func) {
-    if (!block.getTerminator()) {
-      result.push_back(&block);
+    if (!block.getTerminator() && !isExcluded(&block)) {
+      unterminated.push_back(&block);
     }
   }
-  return result;
+  return unterminated;
 }
 
 void LLVMCodeGenVisitor::visitStmtIf(const StmtIfAST& stmtIf) {
@@ -836,6 +862,7 @@ void LLVMCodeGenVisitor::visitStmtIf(const StmtIfAST& stmtIf) {
   llvm::BasicBlock* elseBlock = nullptr;
   llvm::BasicBlock* mergeBlock =
       llvm::BasicBlock::Create(*context, "if_merge", currentFunc);
+  excludeBlockStack.push_back(mergeBlock);
 
   if (!stmtIf.getElseBody().empty()) {
     elseBlock = llvm::BasicBlock::Create(*context, "if_else", currentFunc);
@@ -844,11 +871,14 @@ void LLVMCodeGenVisitor::visitStmtIf(const StmtIfAST& stmtIf) {
     builder->CreateCondBr(condVal, thenBlock, mergeBlock);
   }
 
+  excludeBlockStack.push_back(elseBlock);
   // THEN branch
   builder->SetInsertPoint(thenBlock);
   for (const auto& stmt : stmtIf.getBody()) {
     stmt->accept(*this);
   }
+  excludeBlockStack.pop_back();
+
   auto thenUnterminated = getUnterminatedBlocks(currentFunc);
 
   // ELSE branch (if present)
@@ -866,20 +896,18 @@ void LLVMCodeGenVisitor::visitStmtIf(const StmtIfAST& stmtIf) {
       !thenUnterminated.empty() || !elseUnterminated.empty() || !elseBlock;
   if (needMerge) {
     for (auto* block : thenUnterminated) {
-      if (block == mergeBlock)
-        continue;
       builder->SetInsertPoint(block);
       if (!block->getTerminator())
         builder->CreateBr(mergeBlock);
     }
+
     for (auto* block : elseUnterminated) {
-      if (block == mergeBlock)
-        continue;
       builder->SetInsertPoint(block);
       if (!block->getTerminator())
         builder->CreateBr(mergeBlock);
     }
     builder->SetInsertPoint(mergeBlock);
+    excludeBlockStack.pop_back();
     // Emit code for after the if-statement here, if any.
   }
 }

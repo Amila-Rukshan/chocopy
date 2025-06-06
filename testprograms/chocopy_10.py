@@ -45,8 +45,6 @@ class node(object):
 root: node = None
 root = node()
 
-print(root is root)
-
 root.set_value(100)
 root.insert(150)
 root.insert(40)
