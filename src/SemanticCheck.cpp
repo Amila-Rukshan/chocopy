@@ -97,10 +97,12 @@ void SemanticCheckVisitor::visitClass(const ClassAST& clazz) {
 void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
   for (auto& arg : func.getArgs()) {
     arg->accept(*this);
-    if (currentClass != nullptr)
-      localVarToType[arg->getId().str()] = arg->getTypeInfo();
-    else
-      globalVarToType[arg->getId().str()] = arg->getTypeInfo();
+    localVarToType[arg->getId().str()] = arg->getTypeInfo();
+  }
+
+  for (auto& localVar : func.getVarDefs()) {
+    localVarToType[localVar->getTypedVar()->getId().str()] =
+        localVar->getTypedVar()->getType()->getTypeName();
   }
 
   // class methods type checks
@@ -595,6 +597,20 @@ void SemanticCheckVisitor::visitStmtIf(const StmtIfAST& stmtIf) {
   }
   for (const auto& elseBodyStmt : stmtIf.getElseBody()) {
     elseBodyStmt->accept(*this);
+  }
+}
+
+void SemanticCheckVisitor::visitStmtWhile(const StmtWhileAST& stmtWhile) {
+  stmtWhile.getCondition()->accept(*this);
+  auto conditionType = stmtWhile.getCondition()->getTypeInfo();
+  if (conditionType != "bool") {
+    errors.push_back(SemanticError(stmtWhile.getCondition()->loc().line,
+                                   stmtWhile.getCondition()->loc().col,
+                                   "Condition must be of type 'bool', found '" +
+                                       conditionType + "'\n"));
+  }
+  for (const auto& whileBodyStmt : stmtWhile.getBody()) {
+    whileBodyStmt->accept(*this);
   }
 }
 

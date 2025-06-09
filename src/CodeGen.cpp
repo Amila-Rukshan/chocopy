@@ -241,6 +241,10 @@ void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
     builder->CreateStore(&param, alloca);
   }
 
+  for (auto& localVar : func.getVarDefs()) {
+    localVar->accept(*this);
+  }
+
   for (const auto& stmt : func.getBody()) {
     stmt->accept(*this);
   }
@@ -781,6 +785,14 @@ void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
       varDef.setCodegenValue(defaultValue);
     } else {
       // class method var def (stack var)
+      const std::string typeName =
+          varDef.getTypedVar()->getType()->getTypeName();
+      llvm::Type* varType = llvmTypeOrClassPtrType(typeName);
+      llvm::AllocaInst* alloca = builder->CreateAlloca(
+          varType, nullptr, varDef.getTypedVar()->getId());
+      llvm::Constant* initialVal = llvmLiteralValue(*varDef.getLiteral());
+      builder->CreateStore(initialVal, alloca);
+      localVariables[varDef.getTypedVar()->getId()] = alloca;
     }
   } else {
     if (currentFunction == nullptr) {
@@ -912,6 +924,55 @@ void LLVMCodeGenVisitor::visitStmtIf(const StmtIfAST& stmtIf) {
   }
 }
 
+void LLVMCodeGenVisitor::visitStmtWhile(const StmtWhileAST& stmtWhile) {
+  llvm::Function* currentFunc = builder->GetInsertBlock()->getParent();
+
+  llvm::BasicBlock* whileCond =
+      llvm::BasicBlock::Create(*context, "while_cond", currentFunc);
+  llvm::BasicBlock* whileBody =
+      llvm::BasicBlock::Create(*context, "while_body", currentFunc);
+  llvm::BasicBlock* whileMerge =
+      llvm::BasicBlock::Create(*context, "while_merge", currentFunc);
+
+  // Branch to condition block
+  builder->CreateBr(whileCond);
+
+  // Emit condition block
+  builder->SetInsertPoint(whileCond);
+  stmtWhile.getCondition()->accept(*this);
+  llvm::Value* condVal = stmtWhile.getCondition()->getCodegenValue();
+  if (!condVal) {
+    llvm::errs() << "Unknown condition in while statement\n";
+    return;
+  }
+
+  // Branch based on condition
+  builder->CreateCondBr(condVal, whileBody, whileMerge);
+
+  // Emit body block
+  builder->SetInsertPoint(whileBody);
+  excludeBlockStack.push_back(whileMerge);
+  for (const auto& stmt : stmtWhile.getBody()) {
+    stmt->accept(*this);
+  }
+
+  // Get any unterminated blocks in the body
+  auto unterminated = getUnterminatedBlocks(currentFunc);
+
+  // Add branches back to condition for all unterminated blocks
+  for (auto* block : unterminated) {
+    builder->SetInsertPoint(block);
+    if (!block->getTerminator()) {
+      builder->CreateBr(whileCond);
+    }
+  }
+
+  excludeBlockStack.pop_back();
+
+  // Set insert point to merge block for code after the loop
+  builder->SetInsertPoint(whileMerge);
+}
+
 void LLVMCodeGenVisitor::visitSimpleStmtReturn(
     const SimpleStmtReturnAST& simpleStmtReturn) {
   simpleStmtReturn.getExpr()->accept(*this);
@@ -920,6 +981,9 @@ void LLVMCodeGenVisitor::visitSimpleStmtReturn(
 }
 
 llvm::Value* LLVMCodeGenVisitor::lookupVariable(llvm::StringRef varName) {
+  llvm::Value* localVar = localVariables[varName];
+  if (localVar)
+    return localVar;
   return globalVariables[varName];
 }
 

@@ -40,6 +40,7 @@ class SimpleStmtReturnAST;
 class StmtIfAST;
 
 class IfElseExprAST;
+class StmtWhileAST;
 
 class ASTVisitor {
 public:
@@ -70,6 +71,7 @@ public:
   virtual void visitIfElseExpr(const IfElseExprAST& ifElseExpr) = 0;
 
   virtual void visitStmtIf(const StmtIfAST& stmtIf) = 0;
+  virtual void visitStmtWhile(const StmtWhileAST& stmtWhile) = 0;
 };
 
 /***********************************/
@@ -883,7 +885,9 @@ public:
   const ExprAST* getCondition() const { return condition.get(); }
   const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
 
-  void accept(ASTVisitor& visitor) const override {}
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitStmtWhile(*this);
+  }
 
   /// LLVM style RTTI
   static bool classof(const StmtAST* c) {

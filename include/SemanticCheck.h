@@ -53,6 +53,7 @@ public:
   void visitIfElseExpr(const IfElseExprAST& ifElseExpr) override;
 
   void visitStmtIf(const StmtIfAST& stmtIf) override;
+  void visitStmtWhile(const StmtWhileAST& stmtWhile) override;
 
   inline std::string typeUnion(const std::string& lhsType,
                                const std::string& rhsType);

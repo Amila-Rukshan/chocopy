@@ -50,7 +50,9 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"07", "False\nFalse\nTrue\nFalse\n"},
       {"08", "10\nDriving SUV\n"},
       {"09", "23\n0\nInner If\n5\n"},
-      {"10", "True\nFalse\n40\n60\n100\n150\n"}};
+      {"10", "True\nFalse\n40\n60\n100\n150\n"},
+      {"11", "Buzz\n19\nFizz\n17\n16\nFizzBuzz\n14\n13\nFizz\n11\nBuzz\nFizz\n8"
+             "\n7\nFizz\nBuzz\n4\nFizz\n2\n1\nRESULT:\n10\n"}};
 
   for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;

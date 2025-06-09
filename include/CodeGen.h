@@ -49,6 +49,7 @@ public:
   void visitIfElseExpr(const IfElseExprAST& ifElseExpr) override;
 
   void visitStmtIf(const StmtIfAST& stmtIf) override;
+  void visitStmtWhile(const StmtWhileAST& stmtWhile) override;
 
 private:
   void createBuiltinFuncDecl(const std::string& funcName,
