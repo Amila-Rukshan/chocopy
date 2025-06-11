@@ -202,7 +202,6 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       const VarDefAST* attr = lookupAttributeInHierarchy(
           definedClasses[lhsType], rhsId->getId().str());
       if (attr) {
-        auto v = attr->getTypedVar()->getType()->getTypeName();
         binaryExpr.setTypeInfo(attr->getTypedVar()->getType()->getTypeName());
       } else {
         errors.push_back(
@@ -616,7 +615,8 @@ void SemanticCheckVisitor::visitStmtWhile(const StmtWhileAST& stmtWhile) {
 
 void SemanticCheckVisitor::visitSimpleStmtReturn(
     const SimpleStmtReturnAST& simpleStmtReturn) {
-  simpleStmtReturn.getExpr()->accept(*this);
+  if (simpleStmtReturn.getExpr())
+    simpleStmtReturn.getExpr()->accept(*this);
 }
 
 } // namespace chocopy

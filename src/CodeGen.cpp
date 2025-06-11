@@ -238,6 +238,8 @@ void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
     llvm::AllocaInst* alloca = builder->CreateAlloca(
         paramType, nullptr, func.getArgs().at(paramIndex)->getId());
     localVariables[func.getArgs().at(paramIndex)->getId()] = alloca;
+    localVariableType[func.getArgs().at(paramIndex)->getId()] =
+        llvm::StringRef(func.getArgs()[paramIndex]->getType()->getTypeName());
     builder->CreateStore(&param, alloca);
   }
 
@@ -676,10 +678,15 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
         llvm::errs() << "Unknown local variable: " << idExpr.getId() << "\n";
         return;
       }
-      llvm::Value* localVarVal = builder->CreateLoad(
-          static_cast<llvm::AllocaInst*>(localVar)->getAllocatedType(),
-          localVar, "local_var_val");
-      idExpr.setCodegenValue(localVarVal);
+      // only load primitive types
+      if (!llvmClass(localVariableType[idExpr.getId()])) {
+        llvm::Value* localVarVal = builder->CreateLoad(
+            static_cast<llvm::AllocaInst*>(localVar)->getAllocatedType(),
+            localVar, "local_var_val");
+        idExpr.setCodegenValue(localVarVal);
+      } else {
+        idExpr.setCodegenValue(localVar);
+      }
     }
   }
 }
@@ -793,6 +800,8 @@ void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
       llvm::Constant* initialVal = llvmLiteralValue(*varDef.getLiteral());
       builder->CreateStore(initialVal, alloca);
       localVariables[varDef.getTypedVar()->getId()] = alloca;
+      localVariableType[varDef.getTypedVar()->getId()] =
+          llvm::StringRef(varDef.getTypedVar()->getType()->getTypeName());
     }
   } else {
     if (currentFunction == nullptr) {
@@ -818,6 +827,32 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
     const SimpleStmtAssignAST& simpleStmtAssign) {
   simpleStmtAssign.getRhs()->accept(*this);
   llvm::Value* rhsValue = simpleStmtAssign.getRhs()->getCodegenValue();
+
+  auto rhsType = simpleStmtAssign.getRhs()->getTypeInfo();
+  if (auto rhsId = llvm::dyn_cast<IdExprAST>(simpleStmtAssign.getRhs())) {
+    if (llvmClass(rhsType)) {
+      llvm::Type* fieldType = llvmTypeOrClassPtrType(rhsType);
+      rhsValue =
+          builder->CreateLoad(fieldType, rhsValue, "field_val_loaded_id");
+    }
+    // If rhs is attrib access then load it, as it only the getelementptr
+    // instruction
+  } else if (auto binaryRhs =
+                 llvm::dyn_cast<BinaryExprAST>(simpleStmtAssign.getRhs())) {
+    if (binaryRhs->getOp() == TokenKind::kAttrAccessOp) {
+      if (auto rhsRhsId = llvm::dyn_cast<IdExprAST>(binaryRhs->getRhs())) {
+        auto rhsLhsType = binaryRhs->getLhs()->getTypeInfo();
+        if (llvmClass(rhsLhsType)) {
+          // TODO: this should be list_node type, should be fixed in semantic
+          // check type annotations self.head
+          std::string fieldTypeName = binaryRhs->getTypeInfo();
+          llvm::Type* fieldType = llvmTypeOrClassPtrType(fieldTypeName);
+          rhsValue = builder->CreateLoad(fieldType, rhsValue,
+                                         "field_val_loaded_attrib_acc");
+        }
+      }
+    }
+  }
   for (const auto& varTarget : simpleStmtAssign.getTargets()) {
     if (auto idExpr = llvm::dyn_cast<IdExprAST>(varTarget.get())) {
       llvm::Value* var = lookupVariable(idExpr->getId());
@@ -975,9 +1010,14 @@ void LLVMCodeGenVisitor::visitStmtWhile(const StmtWhileAST& stmtWhile) {
 
 void LLVMCodeGenVisitor::visitSimpleStmtReturn(
     const SimpleStmtReturnAST& simpleStmtReturn) {
-  simpleStmtReturn.getExpr()->accept(*this);
-  llvm::Value* retValue = simpleStmtReturn.getExpr()->getCodegenValue();
-  builder->CreateRet(retValue);
+  if (simpleStmtReturn.getExpr()) {
+    simpleStmtReturn.getExpr()->accept(*this);
+    llvm::Value* retValue = simpleStmtReturn.getExpr()->getCodegenValue();
+    builder->CreateRet(retValue);
+  } else {
+    builder->CreateRet(
+        llvmDefaultValue(currentFunction->getReturnType()->getTypeName()));
+  }
 }
 
 llvm::Value* LLVMCodeGenVisitor::lookupVariable(llvm::StringRef varName) {

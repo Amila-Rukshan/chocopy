@@ -63,7 +63,7 @@ public:
   }
   inline bool isSubTypeOf(const std::string& subType,
                           const std::string& superType) {
-    if (subType == superType)
+    if (subType == superType || subType == "<None>")
       return true;
 
     ClassAST* subClass = definedClasses[subType];

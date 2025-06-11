@@ -24,5 +24,6 @@ A Dev container is setup for linux OS with the llvm dependancies. Just open the 
 - [x] Builtin 'print' function
 - [x] Builtin 'str' type
 - [ ] Complete type checking
-- [ ] Control flows
-- [ ] Binary and unary oprations for int, bool and str types
+- [x] Control flows - if else and while
+- [x] Binary and unary oprations for int, bool and str types
+
