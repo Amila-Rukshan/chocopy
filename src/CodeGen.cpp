@@ -843,12 +843,12 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
       if (auto rhsRhsId = llvm::dyn_cast<IdExprAST>(binaryRhs->getRhs())) {
         auto rhsLhsType = binaryRhs->getLhs()->getTypeInfo();
         if (llvmClass(rhsLhsType)) {
-          // TODO: this should be list_node type, should be fixed in semantic
-          // check type annotations self.head
           std::string fieldTypeName = binaryRhs->getTypeInfo();
-          llvm::Type* fieldType = llvmTypeOrClassPtrType(fieldTypeName);
-          rhsValue = builder->CreateLoad(fieldType, rhsValue,
-                                         "field_val_loaded_attrib_acc");
+          if (llvmClass(fieldTypeName)) {
+            llvm::Type* fieldType = llvmTypeOrClassPtrType(fieldTypeName);
+            rhsValue = builder->CreateLoad(fieldType, rhsValue,
+                                           "field_val_loaded_attrib_acc");
+          }
         }
       }
     }
