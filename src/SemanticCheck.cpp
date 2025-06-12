@@ -323,7 +323,8 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
   case TokenKind::kEqual: {
     auto lhsType = binaryExpr.getLhs()->getTypeInfo();
     auto rhsType = binaryExpr.getRhs()->getTypeInfo();
-    if (lhsType == rhsType && (lhsType == "bool" || lhsType == "int")) {
+    if (lhsType == rhsType &&
+        (lhsType == "bool" || lhsType == "int" || lhsType == "str")) {
       binaryExpr.setTypeInfo("bool");
     } else {
       errors.push_back(
@@ -336,7 +337,8 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
   case TokenKind::kInEqual: {
     auto lhsType = binaryExpr.getLhs()->getTypeInfo();
     auto rhsType = binaryExpr.getRhs()->getTypeInfo();
-    if (lhsType == rhsType && (lhsType == "bool" || lhsType == "int")) {
+    if (lhsType == rhsType &&
+        (lhsType == "bool" || lhsType == "int" || lhsType == "str")) {
       binaryExpr.setTypeInfo("bool");
     } else {
       errors.push_back(

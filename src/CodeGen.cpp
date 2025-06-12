@@ -70,6 +70,7 @@ void LLVMCodeGenVisitor::codeGen() {
   createBuiltinFuncDecl("puts", "int", {"str"});
   createBuiltinFuncDecl("malloc", "str", {"int"});
   createBuiltinFuncDecl("printf", "int", {"str"}, true);
+  createBuiltinFuncDecl("strcmp", "int", {"str", "str"});
 
   programAST->accept(*this);
 }
@@ -547,6 +548,18 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       llvm::errs() << "Unknown operands in binary expression\n";
       return;
     }
+
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    if (lhsType == "str") {
+      llvm::Function* strCmpFunc = module->getFunction("strcmp");
+      llvm::Value* cmpVal =
+          builder->CreateCall(strCmpFunc, {lhsVal, rhsVal}, "strcmp_call");
+      llvm::Value* isEqual = builder->CreateICmpEQ(
+          cmpVal, llvm::ConstantInt::get(cmpVal->getType(), 0), "str_eq");
+      binaryExpr.setCodegenValue(isEqual);
+      return;
+    }
+
     llvm::Value* eqVal = builder->CreateICmpEQ(lhsVal, rhsVal, "cmp_equal");
     binaryExpr.setCodegenValue(eqVal);
     return;
@@ -560,6 +573,18 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       llvm::errs() << "Unknown operands in binary expression\n";
       return;
     }
+
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    if (lhsType == "str") {
+      llvm::Function* strCmpFunc = module->getFunction("strcmp");
+      llvm::Value* cmpVal =
+          builder->CreateCall(strCmpFunc, {lhsVal, rhsVal}, "strcmp_call");
+      llvm::Value* isEqual = builder->CreateICmpNE(
+          cmpVal, llvm::ConstantInt::get(cmpVal->getType(), 0), "str_eq");
+      binaryExpr.setCodegenValue(isEqual);
+      return;
+    }
+
     llvm::Value* neqVal =
         builder->CreateICmpNE(lhsVal, rhsVal, "cmp_not_equal");
     binaryExpr.setCodegenValue(neqVal);
