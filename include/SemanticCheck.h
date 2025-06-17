@@ -86,6 +86,7 @@ private:
   std::vector<std::string> definedClassIds = {"object", "str", "bool", "int"};
   std::vector<std::string> primitiveTypes = {"str", "bool", "int"};
   std::unordered_map<std::string, ClassAST*> definedClasses;
+  std::unordered_map<std::string, const FunctionAST*> definedFunctions;
   std::unordered_map<std::string, std::string> globalVarToType;
   std::unordered_map<std::string, std::string> localVarToType;
 

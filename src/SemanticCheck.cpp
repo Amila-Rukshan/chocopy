@@ -78,6 +78,11 @@ void SemanticCheckVisitor::visitProgram(const ProgramAST& program) {
     clazz->accept(*this);
     currentClass = nullptr;
   }
+  for (auto& globFunc : program.getFuncDefs()) {
+    currentFunction = globFunc.get();
+    globFunc->accept(*this);
+    currentFunction = nullptr;
+  }
   for (auto& varDef : program.getVarDefs()) {
     varDef->accept(*this);
   }
@@ -95,6 +100,8 @@ void SemanticCheckVisitor::visitClass(const ClassAST& clazz) {
 }
 
 void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
+  definedFunctions[func.getId().str()] = &func;
+
   for (auto& arg : func.getArgs()) {
     arg->accept(*this);
     localVarToType[arg->getId().str()] = arg->getTypeInfo();
@@ -167,6 +174,8 @@ void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
   if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
     if (auto classPtr = definedClasses[callee->getId().str()]) {
       callExpr.setTypeInfo(classPtr->getId().str());
+    } else if (auto funcPtr = definedFunctions[callee->getId().str()]) {
+      callExpr.setTypeInfo(funcPtr->getReturnType()->getTypeName());
     }
   } else {
     // TODO: look for function in current class or global scope
@@ -183,6 +192,14 @@ void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
       idExpr.setTypeInfo(currentClass->getId().str());
     } else if (localVarToType.find(idExpr.getId().str()) !=
                localVarToType.end()) {
+      idExpr.setTypeInfo(localVarToType.at(idExpr.getId().str()));
+    } else if (globalVarToType.find(idExpr.getId().str()) !=
+               globalVarToType.end()) {
+      idExpr.setTypeInfo(globalVarToType.at(idExpr.getId().str()));
+    }
+  } else if (currentClass == nullptr && currentFunction != nullptr) {
+    if (localVarToType.find(idExpr.getId().str()) != localVarToType.end()) {
+      auto tt = localVarToType.at(idExpr.getId().str());
       idExpr.setTypeInfo(localVarToType.at(idExpr.getId().str()));
     } else if (globalVarToType.find(idExpr.getId().str()) !=
                globalVarToType.end()) {

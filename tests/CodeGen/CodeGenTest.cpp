@@ -55,7 +55,9 @@ TEST(CodeGenTest, MultiplePrograms) {
              "\n7\nFizz\nBuzz\n4\nFizz\n2\n1\nRESULT:\n10\n"},
       {"12", "20\n5\n45\n10\nFalse\nTrue\n"},
       {"13", "Rust\nC++\nMojo\n"},
-      {"14", "False\nTrue\nTrue\nFalse\nTrue\nFalse\n"}};
+      {"14", "False\nTrue\nTrue\nFalse\nTrue\nFalse\n"},
+      {"15", "x\n4\ny\n1\nz\n0\ny\n0\nx\n2\ny\n0\nx\n1\ny\n0\nx\n0\n===== "
+             "fibonacci numbers =====\n0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n"}};
 
   for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;

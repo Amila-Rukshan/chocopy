@@ -100,6 +100,31 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
     currentClass = nullptr;
   }
 
+  for (auto& globFunc : program.getFuncDefs()) {
+    currentFunction = globFunc.get();
+
+    llvm::Type* retType =
+        llvmTypeOrClassPtrType(globFunc->getReturnType()->getTypeName());
+
+    std::vector<llvm::Type*> argTypes;
+    for (const auto& arg : globFunc->getArgs()) {
+      argTypes.push_back(llvmTypeOrClassPtrType(arg->getType()->getTypeName()));
+    }
+
+    std::string funcName = globFunc->getId().str();
+    llvm::FunctionType* funcType =
+        llvm::FunctionType::get(retType, argTypes, false);
+    llvm::Function* func = llvm::Function::Create(
+        funcType, llvm::Function::ExternalLinkage, funcName, *module);
+
+    functionNameToFunc[funcName] = func;
+    functions[globFunc.get()] = func;
+
+    globFunc->accept(*this);
+
+    currentFunction = nullptr;
+  }
+
   codeGenMainFunc(program.getStmts());
 }
 
@@ -713,6 +738,35 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
         idExpr.setCodegenValue(localVar);
       }
     }
+  } else if (currentClass == nullptr && currentFunction != nullptr) {
+    llvm::Value* localVar = localVariables[idExpr.getId()];
+    if (localVar != nullptr) {
+      // only load primitive types
+      if (!llvmClass(localVariableType[idExpr.getId()])) {
+        llvm::Value* localVarVal = builder->CreateLoad(
+            static_cast<llvm::AllocaInst*>(localVar)->getAllocatedType(),
+            localVar, "local_var_val");
+        idExpr.setCodegenValue(localVarVal);
+      } else {
+        idExpr.setCodegenValue(localVar);
+      }
+    } else {
+      llvm::GlobalVariable* globalVar = globalVariables[idExpr.getId()];
+      if (globalVar == nullptr) {
+        llvm::errs() << "Unknown variable: " << idExpr.getId() << "\n";
+        return;
+      }
+      llvm::Type* varType = globalVar->getValueType();
+      if (globalVariableTypes[idExpr.getId()] == "str" ||
+          globalVariableTypes[idExpr.getId()] == "int" ||
+          globalVariableTypes[idExpr.getId()] == "bool") {
+        llvm::Value* globalVarVal =
+            builder->CreateLoad(varType, globalVar, "global_var_val");
+        idExpr.setCodegenValue(globalVarVal);
+      } else {
+        idExpr.setCodegenValue(globalVar);
+      }
+    }
   }
 }
 
@@ -786,6 +840,9 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
       }
 
       callExpr.setCodegenValue(bitcast);
+    } else {
+      // global function call
+      calleeFunc = module->getFunction(callee->getId());
     }
   }
   if (isConstructorCall) {
@@ -802,7 +859,8 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
     }
     args.push_back(argVal);
   }
-  builder->CreateCall(calleeFunc, args);
+  llvm::Value* funcCall = builder->CreateCall(calleeFunc, args);
+  callExpr.setCodegenValue(funcCall);
 }
 
 void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
@@ -844,6 +902,16 @@ void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
       globalVariableTypes[varDef.getTypedVar()->getId()] = typeName;
     } else {
       // global function var def
+      const std::string typeName =
+          varDef.getTypedVar()->getType()->getTypeName();
+      llvm::Type* varType = llvmTypeOrClassPtrType(typeName);
+      llvm::AllocaInst* alloca = builder->CreateAlloca(
+          varType, nullptr, varDef.getTypedVar()->getId());
+      llvm::Constant* initialVal = llvmLiteralValue(*varDef.getLiteral());
+      builder->CreateStore(initialVal, alloca);
+      localVariables[varDef.getTypedVar()->getId()] = alloca;
+      localVariableType[varDef.getTypedVar()->getId()] =
+          llvm::StringRef(varDef.getTypedVar()->getType()->getTypeName());
     }
   }
 }
