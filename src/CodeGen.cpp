@@ -71,6 +71,7 @@ void LLVMCodeGenVisitor::codeGen() {
   createBuiltinFuncDecl("malloc", "str", {"int"});
   createBuiltinFuncDecl("printf", "int", {"str"}, true);
   createBuiltinFuncDecl("strcmp", "int", {"str", "str"});
+  createBuiltinFuncDecl("strconcat", "str", {"str", "str"});
 
   programAST->accept(*this);
 }
@@ -436,7 +437,12 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
     }
     if (binaryExpr.getLhs()->getTypeInfo() == "str" &&
         binaryExpr.getRhs()->getTypeInfo() == "str") {
-      // TODO: support string concatenation
+      llvm::Function* strConcatFunc = module->getFunction("strconcat");
+      llvm::FunctionType* strConcatFuncType = strConcatFunc->getFunctionType();
+      std::vector<llvm::Value*> args = {lhsVal, rhsVal};
+      llvm::Value* concatVal = builder->CreateCall(
+          strConcatFuncType, strConcatFunc, args, "concat_strings");
+      binaryExpr.setCodegenValue(concatVal);
     } else if (binaryExpr.getLhs()->getTypeInfo() == "int" &&
                binaryExpr.getRhs()->getTypeInfo() == "int") {
       llvm::Value* sumVal = builder->CreateAdd(lhsVal, rhsVal, "sum_ints");

@@ -16,8 +16,11 @@ std::string runIRAndGetOutput(const std::string& irFile) {
   if (base.size() > 6 && base.substr(base.size() - 6) == ".py.ll")
     base = base.substr(0, base.size() - 6);
   std::string binaryFile = base + ".bin";
-  std::string clangCmd =
-      "clang-17 -x ir " + irFile + ".ll" + " -o " + binaryFile + " -g 2>&1";
+  std::string clangCmd = "clang-17 " + irFile + ".ll";
+#ifdef CHOCOPY_LIB_PATH
+  clangCmd += " " + std::string(CHOCOPY_LIB_PATH);
+#endif
+  clangCmd += " -o " + binaryFile + " -g 2>&1";
   int clangResult = std::system(clangCmd.c_str());
   EXPECT_EQ(clangResult, 0) << "Clang failed to compile IR";
 
@@ -57,7 +60,8 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"13", "Rust\nC++\nMojo\n"},
       {"14", "False\nTrue\nTrue\nFalse\nTrue\nFalse\n"},
       {"15", "x\n4\ny\n1\nz\n0\ny\n0\nx\n2\ny\n0\nx\n1\ny\n0\nx\n0\n===== "
-             "fibonacci numbers =====\n0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n"}};
+             "fibonacci numbers =====\n0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n"},
+      {"16", "FirstSecond\n"}};
 
   for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;
