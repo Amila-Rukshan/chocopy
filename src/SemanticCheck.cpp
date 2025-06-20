@@ -176,6 +176,8 @@ void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
       callExpr.setTypeInfo(classPtr->getId().str());
     } else if (auto funcPtr = definedFunctions[callee->getId().str()]) {
       callExpr.setTypeInfo(funcPtr->getReturnType()->getTypeName());
+    } else if (callee->getId() == "len") {
+      callExpr.setTypeInfo("int");
     }
   } else {
     // TODO: look for function in current class or global scope
@@ -405,6 +407,19 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
           SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,
                         "Unsupported types for 'is' operator: '" + lhsType +
                             "' and '" + rhsType + "'\n"));
+    }
+    return;
+  }
+  case TokenKind::kIndexAccessOp: {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (lhsType == "str" && rhsType == "int") {
+      binaryExpr.setTypeInfo("str");
+    } else {
+      errors.push_back(SemanticError(
+          binaryExpr.loc().line, binaryExpr.loc().col,
+          "Unsupported types for '" + tokenKindToString(binaryExpr.getOp()) +
+              "' operator: '" + lhsType + "' and '" + rhsType + "'\n"));
     }
     return;
   }

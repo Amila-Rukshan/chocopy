@@ -252,4 +252,34 @@ z = 1 if a else "str"
             ":5:3: Type mismatch: cannot assign 'object' to 'int'\n");
 }
 
+TEST(SemanticCheckTest, TestStrLenAndStrIndexUsage) {
+  std::string program = R"(
+s: str = "hello"
+b: bool = False
+i: int = 0
+
+s = s + s[0]
+i = i + len(s)
+b = b or len(s)
+
+print(s)
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  chocopy::Parser parser(lexer);
+  std::unique_ptr<chocopy::ProgramAST> programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+
+  chocopy::SemanticCheckVisitor semanticCheck;
+  auto errors = semanticCheck.check(*programAST);
+
+  ASSERT_FALSE(errors.empty());
+  ASSERT_EQ(errors.size(), 2);
+  ASSERT_EQ(errors[0].getErrorMsg(),
+            ":8:7: Unsupported types for 'k_or' operator: 'bool' and 'int'\n");
+  ASSERT_EQ(errors[1].getErrorMsg(),
+            ":8:3: Type mismatch: cannot assign 'UNTYPED' to 'bool'\n");
+}
+
 } // namespace chocopy

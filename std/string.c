@@ -11,3 +11,20 @@ char* strconcat(const char* str1, const char* str2) {
   strcat(result, str2);
   return result;
 }
+
+char* stridx(const char* str, int index) {
+  size_t len = strlen(str);
+  if (index < 0 || index >= len) {
+    return NULL;
+  }
+
+  char* strchar = (char*)malloc(2);
+  if (!strchar)
+    return NULL;
+
+  strchar[0] = str[index];
+  strchar[1] = '\0';
+  return strchar;
+}
+
+int strlength(const char* str) { return strlen(str); }

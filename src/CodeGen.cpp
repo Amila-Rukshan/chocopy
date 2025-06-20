@@ -72,6 +72,8 @@ void LLVMCodeGenVisitor::codeGen() {
   createBuiltinFuncDecl("printf", "int", {"str"}, true);
   createBuiltinFuncDecl("strcmp", "int", {"str", "str"});
   createBuiltinFuncDecl("strconcat", "str", {"str", "str"});
+  createBuiltinFuncDecl("stridx", "str", {"str", "int"});
+  createBuiltinFuncDecl("strlength", "int", {"str"});
 
   programAST->accept(*this);
 }
@@ -642,6 +644,21 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
     binaryExpr.setCodegenValue(isVal);
     return;
   }
+  case TokenKind::kIndexAccessOp: {
+    binaryExpr.getLhs()->accept(*this);
+    binaryExpr.getRhs()->accept(*this);
+    llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
+    llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
+    if (lhsVal == nullptr || rhsVal == nullptr) {
+      llvm::errs() << "Unknown operands in '[]' expression\n";
+      return;
+    }
+    llvm::Function* strIdxFunc = module->getFunction("stridx");
+    llvm::Value* strIdxVal =
+        builder->CreateCall(strIdxFunc, {lhsVal, rhsVal}, "stridx_call");
+    binaryExpr.setCodegenValue(strIdxVal);
+    return;
+  }
   }
 }
 
@@ -810,6 +827,14 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
         llvm::Function* putsFunc = module->getFunction("puts");
         builder->CreateCall(putsFunc, {argVal}, "print_call");
       }
+      return;
+    } else if (callee->getId() == "len") {
+      auto& arg = callExpr.getArgs().front();
+      llvm::Value* argVal = arg->getCodegenValue();
+      llvm::Function* strLenFunc = module->getFunction("strlength");
+      llvm::Value* strLenVal =
+          builder->CreateCall(strLenFunc, {argVal}, "str_len");
+      callExpr.setCodegenValue(strLenVal);
       return;
     } else if (auto classPtr = getClassByName(callee->getId().str())) {
       isConstructorCall = true;
