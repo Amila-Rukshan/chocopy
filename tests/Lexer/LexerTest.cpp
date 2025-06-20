@@ -389,4 +389,56 @@ c.make_noise()
   EXPECT_EQ(lexer.getNextToken(), TokenKind::kEOF);
 }
 
+TEST(LexerTest, TestStringIndexing) {
+  std::string program = R"(
+s: str = "chocopy"
+
+print(s[3])
+print(s[len(s)-1])
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kIdentifier);
+  EXPECT_EQ(lexer.getIdentifier(), "s");
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kColon);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kIdentifier);
+  EXPECT_EQ(lexer.getIdentifier(), "str");
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kAssign);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kStringLiteral);
+  EXPECT_EQ(lexer.getStringLiteral(), "chocopy");
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kNewLine);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kIdentifier);
+
+  EXPECT_EQ(lexer.getIdentifier(), "print");
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kOpenParantheses);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kIdentifier);
+  EXPECT_EQ(lexer.getIdentifier(), "s");
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kOpenSquareBracket);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kIntegerLiteral);
+  EXPECT_EQ(lexer.getIntegerValue(), 3);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kCloseSquareBracket);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kCloseParantheses);
+
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kNewLine);
+
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kIdentifier);
+  EXPECT_EQ(lexer.getIdentifier(), "print");
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kOpenParantheses);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kIdentifier);
+  EXPECT_EQ(lexer.getIdentifier(), "s");
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kOpenSquareBracket);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kIdentifier);
+  EXPECT_EQ(lexer.getIdentifier(), "len");
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kOpenParantheses);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kIdentifier);
+  EXPECT_EQ(lexer.getIdentifier(), "s");
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kCloseParantheses);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kMinus);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kIntegerLiteral);
+  EXPECT_EQ(lexer.getIntegerValue(), 1);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kCloseSquareBracket);
+  EXPECT_EQ(lexer.getNextToken(), TokenKind::kCloseParantheses);
+}
+
 } // namespace chocopy

@@ -858,4 +858,60 @@ c.make_noise()
   EXPECT_EQ(classDef2->getVarDefs().size(), 0);
 }
 
+TEST(ParserTest, TestStringLenAndIndexing) {
+  std::string program = R"(
+s: str = "chocopy"
+
+print(s[3])
+print(s[len(s)-1])
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  Parser parser(lexer);
+
+  auto programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+  const auto& varDefs = programAST->getVarDefs();
+  ASSERT_EQ(varDefs.size(), 1);
+
+  const auto& stmts = programAST->getStmts();
+
+  auto stmt1 = llvm::dyn_cast<SimpleStmtAST>(stmts[0].get());
+  ASSERT_NE(stmt1, nullptr);
+  auto stmt1Expr = llvm::dyn_cast<SimpleStmtExprAST>(stmt1);
+  ASSERT_NE(stmt1Expr, nullptr);
+  auto callExpr = llvm::dyn_cast<CallExprAST>(stmt1Expr->getExpr());
+  ASSERT_NE(callExpr, nullptr);
+
+  auto indexAccExpr =
+      llvm::dyn_cast<BinaryExprAST>(callExpr->getArgs()[0].get());
+  ASSERT_NE(indexAccExpr, nullptr);
+  ASSERT_EQ(indexAccExpr->getOp(), TokenKind::kIndexAccessOp);
+
+  auto stmt2 = llvm::dyn_cast<SimpleStmtAST>(stmts[1].get());
+  ASSERT_NE(stmt2, nullptr);
+  auto stmt2Expr = llvm::dyn_cast<SimpleStmtExprAST>(stmt2);
+  ASSERT_NE(stmt2Expr, nullptr);
+  auto callExpr2 = llvm::dyn_cast<CallExprAST>(stmt2Expr->getExpr());
+  ASSERT_NE(callExpr2, nullptr);
+
+  auto indexAccExpr2 =
+      llvm::dyn_cast<BinaryExprAST>(callExpr2->getArgs()[0].get());
+  ASSERT_NE(indexAccExpr2, nullptr);
+  ASSERT_EQ(indexAccExpr2->getOp(), TokenKind::kIndexAccessOp);
+
+  // len(s)-1
+  auto indexExpr = llvm::dyn_cast<BinaryExprAST>(indexAccExpr2->getRhs());
+  ASSERT_NE(indexExpr, nullptr);
+
+  // len(s)
+  auto indexExprLhs = llvm::dyn_cast<CallExprAST>(indexExpr->getLhs());
+  ASSERT_NE(indexExprLhs, nullptr);
+  auto lenFuncCallee = llvm::dyn_cast<ExprAST>(indexExprLhs->getCallee());
+  ASSERT_NE(lenFuncCallee, nullptr);
+  auto lenFuncCalleeId = llvm::dyn_cast<IdExprAST>(indexExprLhs->getCallee());
+  ASSERT_EQ(lenFuncCalleeId->getId(), "len");
+}
+
 } // namespace chocopy

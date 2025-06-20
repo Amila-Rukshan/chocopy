@@ -516,10 +516,36 @@ private:
     }
   }
 
+  std::unique_ptr<ExprAST> parseExpression() {
+    auto lhs = parseCExpr();
+    if (!lhs) {
+      return nullptr;
+    }
+    return parseBinaryOpRHS(0, std::move(lhs));
+  }
+
   std::unique_ptr<ExprAST> parseBinaryOpRHS(int precedence,
                                             std::unique_ptr<ExprAST> lhs) {
     while (true) {
       int tokenPrecedence = getTokenPrecedence(lexer.getCurToken());
+
+      if (lexer.getCurToken() == TokenKind::kOpenSquareBracket) {
+        if (tokenPrecedence < precedence) {
+          return lhs;
+        }
+        Location opLocation = lexer.getLastLocation();
+        lexer.consume(TokenKind::kOpenSquareBracket);
+        auto rhs = parseExpression();
+        if (!rhs) {
+          return nullptr;
+        }
+        lexer.consume(TokenKind::kCloseSquareBracket);
+        lhs = std::make_unique<BinaryExprAST>(opLocation, std::move(lhs),
+                                              std::move(rhs),
+                                              TokenKind::kIndexAccessOp);
+        continue;
+      }
+
       if (tokenPrecedence < precedence) {
         return lhs;
       }
@@ -529,12 +555,6 @@ private:
       lexer.getNextToken();
 
       auto rhs = parseCExpr();
-
-      // consume close square bracket if op is open square bracket
-      if (op == TokenKind::kOpenSquareBracket) {
-        lexer.consume(TokenKind::kCloseSquareBracket);
-        op = TokenKind::kIndexAccessOp;
-      }
 
       if (!rhs) {
         return nullptr;
