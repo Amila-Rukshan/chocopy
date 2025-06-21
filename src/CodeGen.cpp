@@ -870,6 +870,37 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
         }
       }
 
+      // Call the constructor __init__ method in the same class
+      // If not found call the parent's __init__ method
+      llvm::Function* constructorDunderMethod = nullptr;
+      std::string constructorClass = callee->getId().str();
+      while (constructorClass != "object") {
+        constructorDunderMethod =
+            module->getFunction(constructorClass + "-__init__");
+        if (constructorDunderMethod) {
+          break;
+        }
+        auto parentClass = getClassByName(constructorClass)->getParentClass();
+        if (!parentClass) {
+          break;
+        }
+        constructorClass = parentClass->getId().str();
+      }
+
+      if (constructorDunderMethod) {
+        std::vector<llvm::Value*> args;
+        args.push_back(bitcast);
+        for (const auto& arg : callExpr.getArgs()) {
+          llvm::Value* argVal = arg->getCodegenValue();
+          if (argVal == nullptr) {
+            llvm::errs() << "Unknown argument in constructor call\n";
+            return;
+          }
+          args.push_back(argVal);
+        }
+        builder->CreateCall(constructorDunderMethod, args);
+      }
+
       callExpr.setCodegenValue(bitcast);
     } else {
       // global function call
