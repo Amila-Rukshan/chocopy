@@ -10,3 +10,4 @@ class.cpp.md
 .DS_Store
 tests-choco
 /testprograms/chco.py.ll
+string.o

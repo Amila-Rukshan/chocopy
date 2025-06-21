@@ -100,7 +100,9 @@ void SemanticCheckVisitor::visitClass(const ClassAST& clazz) {
 }
 
 void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
-  definedFunctions[func.getId().str()] = &func;
+  definedFunctions[currentClass != nullptr
+                       ? currentClass->getId().str() + "-" + func.getId().str()
+                       : func.getId().str()] = &func;
 
   for (auto& arg : func.getArgs()) {
     arg->accept(*this);
@@ -174,7 +176,84 @@ void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
   if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
     if (auto classPtr = definedClasses[callee->getId().str()]) {
       callExpr.setTypeInfo(classPtr->getId().str());
-    } else if (auto funcPtr = definedFunctions[callee->getId().str()]) {
+    } else if (auto funcPtr =
+                   definedFunctions[callExpr.getSelfExpr() != nullptr
+                                        ? callExpr.getSelfExpr()
+                                                  ->getTypeInfo() +
+                                              "-" + callee->getId().str()
+                                        : callee->getId().str()]) {
+      if (callee->getId().str() == "print" &&
+          callExpr.getSelfExpr() == nullptr) {
+        if (callExpr.getArgs().empty()) {
+          errors.push_back(SemanticError(
+              callee->loc().line, callee->loc().col,
+              "Function 'print' expects at least one argument\n"));
+        } else {
+          for (const auto& arg : callExpr.getArgs()) {
+            if (arg->getTypeInfo() != "str" && arg->getTypeInfo() != "int" &&
+                arg->getTypeInfo() != "bool") {
+              errors.push_back(SemanticError(arg->loc().line, arg->loc().col,
+                                             "Argument of 'print' must be of "
+                                             "type 'str', 'int', or 'bool'\n"));
+            }
+          }
+        }
+        callExpr.setTypeInfo("None");
+        return;
+      } else if (funcPtr->getArgs().size() !=
+                 (callExpr.getArgs().size() +
+                  (callExpr.getSelfExpr() ? 1 : 0))) {
+        errors.push_back(SemanticError(
+            callee->loc().line, callee->loc().col,
+            "Function '" + callee->getId().str() + "' expects " +
+                std::to_string(funcPtr->getArgs().size()) +
+                " arguments, but got " +
+                std::to_string(callExpr.getArgs().size()) + "\n"));
+      } else {
+        // Hanlde dispatch call type checking
+        if (callExpr.getSelfExpr()) {
+          if (!isSubTypeOf(callExpr.getSelfExpr()->getTypeInfo(),
+                           funcPtr->getArgs()[0]->getType()->getTypeName())) {
+            errors.push_back(SemanticError(
+                callExpr.getSelfExpr()->loc().line,
+                callExpr.getSelfExpr()->loc().col,
+                "First argument of function '" + callee->getId().str() +
+                    "' must be of type '" +
+                    funcPtr->getArgs()[0]->getType()->getTypeName() +
+                    "', but got '" + callExpr.getSelfExpr()->getTypeInfo() +
+                    "'\n"));
+          }
+          for (size_t argIndex = 1; argIndex < funcPtr->getArgs().size();
+               ++argIndex) {
+            auto argType = callExpr.getArgs()[argIndex - 1]->getTypeInfo();
+            auto expectedType =
+                funcPtr->getArgs()[argIndex]->getType()->getTypeName();
+            if (!isSubTypeOf(argType, expectedType)) {
+              errors.push_back(
+                  SemanticError(callExpr.loc().line, callExpr.loc().col,
+                                "Argument " + std::to_string(argIndex + 1) +
+                                    " of function '" + callee->getId().str() +
+                                    "' must be of type '" + expectedType +
+                                    "', but got '" + argType + "'\n"));
+            }
+          }
+        } else {
+          for (size_t argIndex = 0; argIndex < funcPtr->getArgs().size();
+               ++argIndex) {
+            auto argType = callExpr.getArgs()[argIndex]->getTypeInfo();
+            auto expectedType =
+                funcPtr->getArgs()[argIndex]->getType()->getTypeName();
+            if (!isSubTypeOf(argType, expectedType)) {
+              errors.push_back(
+                  SemanticError(callExpr.loc().line, callExpr.loc().col,
+                                "Argument " + std::to_string(argIndex + 1) +
+                                    " of function '" + callee->getId().str() +
+                                    "' must be of type '" + expectedType +
+                                    "', but got '" + argType + "'\n"));
+            }
+          }
+        }
+      }
       callExpr.setTypeInfo(funcPtr->getReturnType()->getTypeName());
     } else if (callee->getId() == "len") {
       callExpr.setTypeInfo("int");
@@ -212,6 +291,13 @@ void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
 
 void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
   binaryExpr.getLhs()->accept(*this);
+  // set dispatch and type info
+  if (binaryExpr.getOp() == TokenKind::kAttrAccessOp) {
+    if (auto rhsCall = const_cast<CallExprAST*>(
+            llvm::dyn_cast<CallExprAST>(binaryExpr.getRhs()))) {
+      rhsCall->setSelfExpr(binaryExpr.getLhs());
+    }
+  }
   binaryExpr.getRhs()->accept(*this);
   switch (binaryExpr.getOp()) {
   case TokenKind::kAttrAccessOp: {
@@ -594,19 +680,11 @@ void SemanticCheckVisitor::visitSimpleStmtAssign(
   auto rhsType = simpleStmtAssign.getRhs()->getTypeInfo();
   for (const auto& target : simpleStmtAssign.getTargets()) {
     auto targetType = target->getTypeInfo();
-    if (isPrimitiveType(targetType) && isPrimitiveType(rhsType) &&
-        targetType != rhsType) {
+    if (!isSubTypeOf(rhsType, targetType)) {
       errors.push_back(SemanticError(target->loc().line, target->loc().col,
                                      "Type mismatch: cannot assign '" +
                                          rhsType + "' to '" + targetType +
                                          "'\n"));
-    } else {
-      if (!isSubTypeOf(rhsType, targetType)) {
-        errors.push_back(SemanticError(target->loc().line, target->loc().col,
-                                       "Type mismatch: cannot assign '" +
-                                           rhsType + "' to '" + targetType +
-                                           "'\n"));
-      }
     }
   }
 }
@@ -651,6 +729,24 @@ void SemanticCheckVisitor::visitSimpleStmtReturn(
     const SimpleStmtReturnAST& simpleStmtReturn) {
   if (simpleStmtReturn.getExpr())
     simpleStmtReturn.getExpr()->accept(*this);
+  auto retType = simpleStmtReturn.getExpr()
+                     ? simpleStmtReturn.getExpr()->getTypeInfo()
+                     : "<None>";
+  auto funcReturnType = currentFunction
+                            ? currentFunction->getReturnType()->getTypeName()
+                            : "<None>";
+  if (isPrimitiveType(funcReturnType) && isPrimitiveType(retType) &&
+      funcReturnType != retType) {
+    errors.push_back(
+        SemanticError(simpleStmtReturn.loc().line, simpleStmtReturn.loc().col,
+                      "Return type mismatch: expected '" + funcReturnType +
+                          "', found '" + retType + "'\n"));
+  } else if (!isSubTypeOf(retType, funcReturnType)) {
+    errors.push_back(
+        SemanticError(simpleStmtReturn.loc().line, simpleStmtReturn.loc().col,
+                      "Return type mismatch: expected '" + funcReturnType +
+                          "', found '" + retType + "'\n"));
+  }
 }
 
 } // namespace chocopy

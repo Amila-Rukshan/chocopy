@@ -690,9 +690,13 @@ public:
     return c->getKind() == ExprAST::Expr_Call;
   }
 
+  const ExprAST* getSelfExpr() const { return selfExpr; }
+  void setSelfExpr(const ExprAST* selfExpr) { this->selfExpr = selfExpr; }
+
 private:
   std::unique_ptr<ExprAST> callee;
   std::vector<std::unique_ptr<ExprAST>> args;
+  const ExprAST* selfExpr = nullptr;
 };
 
 class PrintExprAST : public ExprAST {
@@ -831,7 +835,7 @@ public:
 
   StmtASTKind getKind() const { return kind; }
 
-  const Location& loc() { return location; }
+  const Location& loc() const { return location; }
 
   virtual void accept(ASTVisitor& visitor) const = 0;
 

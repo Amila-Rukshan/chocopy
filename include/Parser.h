@@ -322,13 +322,12 @@ private:
       lexer.consume(TokenKind::kNewLine);
       return std::make_unique<SimpleStmtPassAST>(lexer.getLastLocation());
     case TokenKind::k_return: {
+      Location location = lexer.getLastLocation();
       lexer.consume(TokenKind::k_return);
       if (lexer.getCurToken() == TokenKind::kNewLine) {
         lexer.consume(TokenKind::kNewLine);
-        return std::make_unique<SimpleStmtReturnAST>(lexer.getLastLocation(),
-                                                     nullptr);
+        return std::make_unique<SimpleStmtReturnAST>(location, nullptr);
       }
-      Location location = lexer.getLastLocation();
       std::unique_ptr<ExprAST> retExpr = nullptr;
       retExpr = parseExpr();
       lexer.consume(TokenKind::kNewLine);

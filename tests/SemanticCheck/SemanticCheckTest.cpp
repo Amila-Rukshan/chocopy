@@ -282,4 +282,33 @@ print(s)
             ":8:3: Type mismatch: cannot assign 'UNTYPED' to 'bool'\n");
 }
 
+TEST(SemanticCheckTest, TestArgTypesAndReturnTypeMismatch) {
+  std::string program = R"(# A broken program
+def is_even(x:int) -> bool:
+    if x % 2 == 1:
+        return 0      # FIXME
+    else:
+        return True
+
+print(is_even("3"))   # FIXME
+
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  chocopy::Parser parser(lexer);
+  std::unique_ptr<chocopy::ProgramAST> programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+
+  chocopy::SemanticCheckVisitor semanticCheck;
+  auto errors = semanticCheck.check(*programAST);
+
+  ASSERT_FALSE(errors.empty());
+  ASSERT_EQ(errors.size(), 2);
+  ASSERT_EQ(errors[0].getErrorMsg(),
+            ":4:9: Return type mismatch: expected 'bool', found 'int'\n");
+  ASSERT_EQ(errors[1].getErrorMsg(), ":8:7: Argument 1 of function 'is_even' "
+                                     "must be of type 'int', but got 'str'\n");
+}
+
 } // namespace chocopy
