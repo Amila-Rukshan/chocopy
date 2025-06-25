@@ -27,6 +27,7 @@ class LiteralTrueAST;
 class LiteralFalseAST;
 class LiteralStringAST;
 class LiteralNoneAST;
+class ListLiteralExprAST;
 
 class CallExprAST;
 class BinaryExprAST;
@@ -56,6 +57,9 @@ public:
   virtual void visitLiteralFalse(const LiteralFalseAST& literalFalse) = 0;
   virtual void visitLiteralString(const LiteralStringAST& literalString) = 0;
   virtual void visitLiteralNone(const LiteralNoneAST& literalNone) = 0;
+  virtual void
+  visitListLiteralExpr(const ListLiteralExprAST& listLiteralExpr) = 0;
+
   virtual void visitCallExpr(const CallExprAST& callExpr) = 0;
   virtual void visitIdExpr(const IdExprAST& idExpr) = 0;
   virtual void visitBinaryExpr(const BinaryExprAST& binaryExpr) = 0;
@@ -561,6 +565,8 @@ private:
 /* Expression                      */
 /***********************************/
 
+enum class AccessKind { Read, Write };
+
 class ExprAST {
 
 public:
@@ -581,6 +587,10 @@ public:
       : kind(kind), location(std::move(location)) {}
   virtual ~ExprAST() = default;
 
+  void setAccessKind(AccessKind kind) { accessKind = kind; }
+
+  AccessKind getAccessKind() const { return accessKind; }
+
   ExprASTKind getKind() const { return kind; }
 
   const Location& loc() const { return location; }
@@ -594,6 +604,8 @@ public:
   llvm::Value* getCodegenValue() const { return codegenInfo->value; }
 
 private:
+  AccessKind accessKind = AccessKind::Read;
+
   struct TypeInfo {
     std::string type = "UNTYPED";
   };
@@ -660,15 +672,21 @@ public:
     return elements;
   }
 
-  void accept(ASTVisitor& visitor) const override {}
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitListLiteralExpr(*this);
+  }
 
   // LLVM style RTTI
   static bool classof(const ExprAST* c) {
     return c->getKind() == ExprAST::Expr_ListLiteral;
   }
 
+  void setListDimension(size_t dimension) { listDimension = dimension; }
+  size_t getListDimension() const { return listDimension; }
+
 private:
   std::vector<std::unique_ptr<ExprAST>> elements;
+  size_t listDimension = 1;
 };
 
 class CallExprAST : public ExprAST {

@@ -63,7 +63,8 @@ TEST(CodeGenTest, MultiplePrograms) {
              "fibonacci numbers =====\n0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n"},
       {"16", "FirstSecond\n"},
       {"17", "True\nA\nE\nI\nO\nU\n"},
-      {"18", "12\nAa\n79\nAaaA\n101\nAadD\n"}};
+      {"18", "12\nAa\n79\nAaaA\n101\nAadD\n"},
+      {"19", "100\n1\n23\n11\n4\n200\n6\n7\n8\n9\n300\n"}};
 
   for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;

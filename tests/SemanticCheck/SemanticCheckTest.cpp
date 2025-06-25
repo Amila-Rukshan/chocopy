@@ -311,4 +311,30 @@ print(is_even("3"))   # FIXME
                                      "must be of type 'int', but got 'str'\n");
 }
 
+TEST(SemanticCheckTest, TestListType) {
+  std::string program = R"(
+arr: [[int]] = None
+arr = [[1, 2, 3], [4, 5, 6]]
+
+arr = [1, 2]
+arr = [["a", "b"], ["c"]]
+)";
+
+  LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                    "test.py");
+  chocopy::Parser parser(lexer);
+  std::unique_ptr<chocopy::ProgramAST> programAST = parser.parseProgram();
+  ASSERT_NE(programAST, nullptr);
+
+  chocopy::SemanticCheckVisitor semanticCheck;
+  auto errors = semanticCheck.check(*programAST);
+
+  ASSERT_FALSE(errors.empty());
+  ASSERT_EQ(errors.size(), 2);
+  ASSERT_EQ(errors[0].getErrorMsg(),
+            ":5:5: Type mismatch: cannot assign 'int[]' to 'int[[]]'\n");
+  ASSERT_EQ(errors[1].getErrorMsg(),
+            ":6:5: Type mismatch: cannot assign 'str[[]]' to 'int[[]]'\n");
+}
+
 } // namespace chocopy

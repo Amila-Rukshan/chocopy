@@ -38,6 +38,8 @@ public:
   void visitLiteralFalse(const LiteralFalseAST& literalFalse) override;
   void visitLiteralString(const LiteralStringAST& literalString) override;
   void visitLiteralNone(const LiteralNoneAST& literalNone) override;
+  void visitListLiteralExpr(const ListLiteralExprAST& listLiteralExpr) override;
+
   void visitCallExpr(const CallExprAST& callExpr) override;
   void visitIdExpr(const IdExprAST& idExpr) override;
   void visitBinaryExpr(const BinaryExprAST& binaryExpr) override;
@@ -63,6 +65,20 @@ public:
   }
   inline bool isSubTypeOf(const std::string& subType,
                           const std::string& superType) {
+    auto subPos = subType.find('[');
+    auto superPos = superType.find('[');
+    if (subPos == std::string::npos ^ superPos == std::string::npos)
+      return false;
+    if (subPos != std::string::npos && superPos != std::string::npos) {
+      int dimSub = std::count(subType.begin(), subType.end(), '[');
+      int dimSuper = std::count(superType.begin(), superType.end(), '[');
+      if (dimSub != dimSuper)
+        return false;
+      auto subTypeBase = subType.substr(0, subPos);
+      auto superTypeBase = superType.substr(0, superPos);
+      return isSubTypeOf(subTypeBase, superTypeBase);
+    }
+
     if (subType == superType || subType == "<None>")
       return true;
 
@@ -75,6 +91,21 @@ public:
       subClass = const_cast<ClassAST*>(subClass->getParentClass());
     }
     return false;
+  }
+
+  inline bool isListType(const std::string& type) {
+    return type.find('[') != std::string::npos &&
+           type.find(']') != std::string::npos;
+  }
+
+  inline std::string getInnerType(const std::string& type) {
+    size_t first = type.find('[');
+    size_t last = type.rfind(']');
+    if (first == std::string::npos || last == std::string::npos ||
+        last <= first)
+      throw std::invalid_argument("Invalid list type format");
+    return type.substr(0, first) +
+           type.substr(first + 1, type.size() - first - 2);
   }
 
 private:

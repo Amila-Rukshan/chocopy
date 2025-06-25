@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <iostream>
+#include <stack>
 
 #include "SemanticCheck.h"
 #include "llvm/ADT/Twine.h"
@@ -168,6 +170,39 @@ void SemanticCheckVisitor::visitLiteralString(
 void SemanticCheckVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
   literalNone.setTypeInfo("<None>");
 };
+
+void SemanticCheckVisitor::visitListLiteralExpr(
+    const ListLiteralExprAST& listLiteralExpr) {
+  size_t maxDepth = -1;
+  size_t elementCount = 0;
+  std::string listLiteralType = "UNTYPED";
+  std::stack<std::pair<const ListLiteralExprAST*, size_t>> stack;
+  stack.push({&listLiteralExpr, 1});
+  while (!stack.empty()) {
+    auto [top, depth] = stack.top();
+    stack.pop();
+    for (auto& element : top->getElements()) {
+      if (auto* inner = llvm::dyn_cast<ListLiteralExprAST>(element.get())) {
+        stack.push({inner, depth + 1});
+      } else if (auto* literal =
+                     llvm::dyn_cast<LiteralExprAST>(element.get())) {
+        if (maxDepth == -1)
+          maxDepth = depth;
+        if (maxDepth != depth) {
+          errors.push_back(SemanticError(
+              literal->loc().line, literal->loc().col,
+              "List elements must have the same depth in a list literal\n"));
+        }
+        elementCount++;
+        literal->accept(*this);
+        listLiteralType = typeUnion(listLiteralType, literal->getTypeInfo());
+      }
+    }
+  }
+  const_cast<ListLiteralExprAST&>(listLiteralExpr).setListDimension(maxDepth);
+  listLiteralExpr.setTypeInfo(listLiteralType + std::string(maxDepth, '[') +
+                              std::string(maxDepth, ']'));
+}
 
 void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
   for (const auto& arg : callExpr.getArgs()) {
@@ -501,6 +536,8 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
     auto rhsType = binaryExpr.getRhs()->getTypeInfo();
     if (lhsType == "str" && rhsType == "int") {
       binaryExpr.setTypeInfo("str");
+    } else if (isListType(lhsType) && rhsType == "int") {
+      binaryExpr.setTypeInfo(getInnerType(lhsType));
     } else {
       errors.push_back(SemanticError(
           binaryExpr.loc().line, binaryExpr.loc().col,
@@ -575,7 +612,11 @@ void SemanticCheckVisitor::visitIfElseExpr(const IfElseExprAST& ifElseExpr) {
 
 std::string SemanticCheckVisitor::typeUnion(const std::string& lhsType,
                                             const std::string& rhsType) {
-  if (lhsType == "int" && rhsType == "int")
+  if (lhsType == "UNTYPED")
+    return rhsType;
+  else if (rhsType == "UNTYPED")
+    return lhsType;
+  else if (lhsType == "int" && rhsType == "int")
     return "int";
   else if (lhsType == "bool" && rhsType == "bool")
     return "bool";
@@ -665,14 +706,29 @@ void SemanticCheckVisitor::visitTypedVar(const TypedVarAST& typedVar) {
           "Undefined type: " + idStringTypeAST->getId().str() + "\n"));
     }
   }
-  auto listTypeAST = llvm::dyn_cast<ListTypeAST>(typedVar.getType());
-  assert(listTypeAST == nullptr && "List type is not implemented yet");
+
+  if (auto listTypeAST = llvm::dyn_cast<ListTypeAST>(typedVar.getType())) {
+    if (isDefinedType(listTypeAST->getType()->getTypeName())) {
+      typedVar.setTypeInfo(listTypeAST->getTypeName());
+      return;
+    } else {
+      errors.push_back(
+          SemanticError(listTypeAST->loc().line, listTypeAST->loc().col,
+                        "Undefined type for list type: " +
+                            listTypeAST->getType()->getTypeName() + "\n"));
+    }
+  }
 }
 
 void SemanticCheckVisitor::visitSimpleStmtAssign(
     const SimpleStmtAssignAST& simpleStmtAssign) {
   for (const auto& target : simpleStmtAssign.getTargets()) {
     target->accept(*this);
+    if (auto binaryExpr = llvm::dyn_cast<BinaryExprAST>(target.get())) {
+      if (binaryExpr->getOp() == TokenKind::kIndexAccessOp) {
+        target->setAccessKind(AccessKind::Write);
+      }
+    }
   }
   simpleStmtAssign.getRhs()->accept(*this);
   // Check if the right-hand side expression is compatible with the

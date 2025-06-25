@@ -34,6 +34,8 @@ public:
   void visitLiteralFalse(const LiteralFalseAST& literalFalse) override;
   void visitLiteralString(const LiteralStringAST& literalString) override;
   void visitLiteralNone(const LiteralNoneAST& literalNone) override;
+  void visitListLiteralExpr(const ListLiteralExprAST& listLiteralExpr) override;
+
   void visitCallExpr(const CallExprAST& callExpr) override;
   void visitIdExpr(const IdExprAST& idExpr) override;
   void visitBinaryExpr(const BinaryExprAST& binaryExpr) override;

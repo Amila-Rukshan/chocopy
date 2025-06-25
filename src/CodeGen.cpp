@@ -351,6 +351,70 @@ void LLVMCodeGenVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
       llvmTypeOrClassPtrType("object")->getPointerTo()));
 }
 
+void LLVMCodeGenVisitor::visitListLiteralExpr(
+    const ListLiteralExprAST& listLiteralExpr) {
+  std::vector<llvm::Value*> elements;
+  size_t dimension = listLiteralExpr.getListDimension();
+
+  // Recursive helper to process each level
+  std::function<llvm::Value*(const ListLiteralExprAST&, size_t)> buildList;
+  buildList = [&](const ListLiteralExprAST& node,
+                  size_t level) -> llvm::Value* {
+    std::vector<llvm::Value*> items;
+    for (const auto& element : node.getElements()) {
+      if (auto* inner = llvm::dyn_cast<ListLiteralExprAST>(element.get())) {
+        items.push_back(buildList(*inner, level + 1));
+      } else {
+        element->accept(*this);
+        items.push_back(element->getCodegenValue());
+      }
+    }
+
+    llvm::Type* elemType =
+        llvmTypeOrClassPtrType(node.getElements()[0]->getTypeInfo());
+    size_t arraySize =
+        module->getDataLayout().getTypeAllocSize(elemType) * items.size();
+    llvm::Value* arrayMallocSize =
+        llvm::ConstantInt::get(*context, llvm::APInt(32, arraySize));
+    llvm::Value* arrayMallocCall = builder->CreateCall(
+        module->getFunction("malloc"), arrayMallocSize, "arr_malloc_call");
+    // Store each item in the allocated array
+    for (size_t i = 0; i < items.size(); ++i) {
+      llvm::Value* itemPtr = builder->CreateGEP(
+          elemType, arrayMallocCall,
+          llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), i),
+          "item_ptr");
+      builder->CreateStore(items[i], itemPtr);
+    }
+    // Set the length of the array
+    llvm::Value* length =
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), items.size());
+    // Create a struct to hold the array and its length
+    llvm::StructType* listStructType = llvm::StructType::create(
+        *context, {llvm::Type::getInt32Ty(*context), elemType->getPointerTo()},
+        "ListStruct");
+    size_t arrayStructSize =
+        module->getDataLayout().getTypeAllocSize(listStructType);
+    llvm::Value* arrayStructMallocCall = builder->CreateCall(
+        module->getFunction("malloc"),
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context),
+                               arrayStructSize),
+        "array_struct_malloc_call");
+    // Store the length and array pointer in the struct
+    llvm::Value* lengthPtr = builder->CreateStructGEP(
+        listStructType, arrayStructMallocCall, 0, "length_ptr");
+    builder->CreateStore(length, lengthPtr);
+    llvm::Value* arrPtr = builder->CreateStructGEP(
+        listStructType, arrayStructMallocCall, 1, "array_ptr");
+    builder->CreateStore(arrayMallocCall, arrPtr);
+    // Return the struct pointer
+    return arrayStructMallocCall;
+  };
+
+  llvm::Value* listVal = buildList(listLiteralExpr, 1);
+  listLiteralExpr.setCodegenValue(listVal);
+}
+
 void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
   switch (binaryExpr.getOp()) {
   case TokenKind::kAttrAccessOp: {
@@ -653,11 +717,42 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       llvm::errs() << "Unknown operands in '[]' expression\n";
       return;
     }
-    llvm::Function* strIdxFunc = module->getFunction("stridx");
-    llvm::Value* strIdxVal =
-        builder->CreateCall(strIdxFunc, {lhsVal, rhsVal}, "stridx_call");
-    binaryExpr.setCodegenValue(strIdxVal);
-    return;
+    if (binaryExpr.getLhs()->getTypeInfo() == "str") {
+      llvm::Function* strIdxFunc = module->getFunction("stridx");
+      llvm::Value* strIdxVal =
+          builder->CreateCall(strIdxFunc, {lhsVal, rhsVal}, "stridx_call");
+      binaryExpr.setCodegenValue(strIdxVal);
+      return;
+    } else {
+      // List index access
+      llvm::Type* listStructType = llvm::StructType::get(
+          *context,
+          {llvm::Type::getInt32Ty(*context),
+           llvmTypeOrClassPtrType(binaryExpr.getLhs()->getTypeInfo())});
+      // Load the list struct pointer
+      llvm::Value* listStructPtr = builder->CreateLoad(
+          listStructType->getPointerTo(), lhsVal, "list_ptr_val");
+      // Get pointer to the array pointer field
+      llvm::Value* arrayPtrPtr = builder->CreateStructGEP(
+          listStructType, listStructPtr, 1, "array_ptr");
+      // Load the actual array pointer
+      llvm::Value* arrayPtr = builder->CreateLoad(
+          listStructType->getStructElementType(1), arrayPtrPtr, "array_val");
+      // Calculate the element pointer using the index
+      llvm::Value* elemPtr =
+          builder->CreateGEP(llvmTypeOrClassPtrType(binaryExpr.getTypeInfo()),
+                             arrayPtr, rhsVal, "elem_ptr");
+      if (binaryExpr.getAccessKind() == AccessKind::Write) {
+        binaryExpr.setCodegenValue(elemPtr);
+        return;
+      }
+      // Load the element value
+      llvm::Value* elemVal =
+          builder->CreateLoad(llvmTypeOrClassPtrType(binaryExpr.getTypeInfo()),
+                              elemPtr, "elem_val");
+      binaryExpr.setCodegenValue(elemVal);
+      return;
+    }
   }
   }
 }
@@ -830,6 +925,30 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
       return;
     } else if (callee->getId() == "len") {
       auto& arg = callExpr.getArgs().front();
+      size_t pos = arg->getTypeInfo().find('[');
+      if (pos != std::string::npos) {
+        llvm::StructType* listStructTy =
+            llvm::StructType::get(*context,
+                                  {llvm::Type::getInt32Ty(*context),
+                                   llvmTypeOrClassPtrType(arg->getTypeInfo())},
+                                  false);
+        // Arg holds the ptr to the list struct
+        llvm::Value* argStoragePtr = arg->getCodegenValue();
+        // Load the list struct pointer
+        llvm::Value* listStructPtr = builder->CreateLoad(
+            listStructTy->getPointerTo(), argStoragePtr, "list_ptr_val");
+        // Calulate GEP for length field from the struct
+        llvm::Value* lengthPtr = builder->CreateStructGEP(
+            listStructTy, listStructPtr, 0, "length_ptr");
+        // Load the length value
+        llvm::Value* lengthVal = builder->CreateLoad(
+            llvm::Type::getInt32Ty(*context), lengthPtr, "length_val");
+        callExpr.setCodegenValue(lengthVal);
+        return;
+      } else if (arg->getTypeInfo() != "str") {
+        llvm::errs() << "len() can only be called on str or list types\n";
+        return;
+      }
       llvm::Value* argVal = arg->getCodegenValue();
       llvm::Function* strLenFunc = module->getFunction("strlength");
       llvm::Value* strLenVal =
@@ -1027,6 +1146,11 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
         llvm::Value* fieldGEP = builder->CreateGEP(
             llvmClass(instanceType), instancePtr, attributeGEP, "field_gep");
         builder->CreateStore(rhsValue, fieldGEP);
+      } else if (binaryExpr->getOp() == TokenKind::kIndexAccessOp) {
+        // List index access
+        binaryExpr->accept(*this);
+        llvm::Value* arrPtr = binaryExpr->getCodegenValue();
+        builder->CreateStore(rhsValue, arrPtr);
       }
     }
   }
@@ -1293,7 +1417,12 @@ llvm::Type*
 LLVMCodeGenVisitor::llvmTypeOrClassPtrType(const std::string& typeName) {
   llvm::Type* type = llvmType(typeName);
   if (type == nullptr) {
-    type = llvmClass(typeName)->getPointerTo();
+    size_t pos = typeName.find('[');
+    if (pos != std::string::npos) {
+      type = llvmTypeOrClassPtrType(typeName.substr(0, pos))->getPointerTo();
+    } else {
+      type = llvmClass(typeName)->getPointerTo();
+    }
   }
   return type;
 }

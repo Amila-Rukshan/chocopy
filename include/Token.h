@@ -148,6 +148,7 @@ inline std::string tokenKindToString(TokenKind kind) {
       {TokenKind::kEOF, "kEOF"},
       {TokenKind::kUnknown, "kUnknown"},
       {TokenKind::kInvalidIndent, "kInvalidIndent"},
+      {TokenKind::kIndexAccessOp, "kIndexAccessOp"},
   };
 
   auto it = tokenKindMap.find(kind);
