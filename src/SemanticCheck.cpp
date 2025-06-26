@@ -183,6 +183,7 @@ void SemanticCheckVisitor::visitListLiteralExpr(
     stack.pop();
     for (auto& element : top->getElements()) {
       if (auto* inner = llvm::dyn_cast<ListLiteralExprAST>(element.get())) {
+        inner->accept(*this);
         stack.push({inner, depth + 1});
       } else if (auto* literal =
                      llvm::dyn_cast<LiteralExprAST>(element.get())) {
@@ -537,7 +538,12 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
     if (lhsType == "str" && rhsType == "int") {
       binaryExpr.setTypeInfo("str");
     } else if (isListType(lhsType) && rhsType == "int") {
-      binaryExpr.setTypeInfo(getInnerType(lhsType));
+      auto outputType = getInnerType(lhsType);
+      if (isListType(outputType)) {
+        const_cast<BinaryExprAST&>(binaryExpr)
+            .setAccessKind(AccessKind::ListAccess);
+      }
+      binaryExpr.setTypeInfo(outputType);
     } else {
       errors.push_back(SemanticError(
           binaryExpr.loc().line, binaryExpr.loc().col,

@@ -565,7 +565,7 @@ private:
 /* Expression                      */
 /***********************************/
 
-enum class AccessKind { Read, Write };
+enum class AccessKind { Read, Write, ListAccess };
 
 class ExprAST {
 

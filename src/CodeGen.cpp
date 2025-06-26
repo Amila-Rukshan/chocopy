@@ -742,7 +742,8 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       llvm::Value* elemPtr =
           builder->CreateGEP(llvmTypeOrClassPtrType(binaryExpr.getTypeInfo()),
                              arrayPtr, rhsVal, "elem_ptr");
-      if (binaryExpr.getAccessKind() == AccessKind::Write) {
+      if (binaryExpr.getAccessKind() == AccessKind::Write ||
+          binaryExpr.getAccessKind() == AccessKind::ListAccess) {
         binaryExpr.setCodegenValue(elemPtr);
         return;
       }
@@ -1133,19 +1134,21 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
       builder->CreateStore(rhsValue, var);
     } else if (auto binaryExpr =
                    llvm::dyn_cast<BinaryExprAST>(varTarget.get())) {
-      if (auto rhs = llvm::dyn_cast<IdExprAST>(binaryExpr->getRhs())) {
-        binaryExpr->getLhs()->accept(*this);
-        std::string instanceType = binaryExpr->getLhs()->getTypeInfo();
-        auto classPtr = getClassByName(instanceType);
-        auto classType = llvmClass(instanceType);
-        llvm::Value* instancePtr = builder->CreateLoad(
-            llvmClass(instanceType)->getPointerTo(),
-            binaryExpr->getLhs()->getCodegenValue(), "current_instance_ptr");
-        const auto& attributeGEP =
-            classFieldGEPMap.at(classPtr)[rhs->getId().str()].first;
-        llvm::Value* fieldGEP = builder->CreateGEP(
-            llvmClass(instanceType), instancePtr, attributeGEP, "field_gep");
-        builder->CreateStore(rhsValue, fieldGEP);
+      if (binaryExpr->getOp() == TokenKind::kAttrAccessOp) {
+        if (auto rhs = llvm::dyn_cast<IdExprAST>(binaryExpr->getRhs())) {
+          binaryExpr->getLhs()->accept(*this);
+          std::string instanceType = binaryExpr->getLhs()->getTypeInfo();
+          auto classPtr = getClassByName(instanceType);
+          auto classType = llvmClass(instanceType);
+          llvm::Value* instancePtr = builder->CreateLoad(
+              llvmClass(instanceType)->getPointerTo(),
+              binaryExpr->getLhs()->getCodegenValue(), "current_instance_ptr");
+          const auto& attributeGEP =
+              classFieldGEPMap.at(classPtr)[rhs->getId().str()].first;
+          llvm::Value* fieldGEP = builder->CreateGEP(
+              llvmClass(instanceType), instancePtr, attributeGEP, "field_gep");
+          builder->CreateStore(rhsValue, fieldGEP);
+        }
       } else if (binaryExpr->getOp() == TokenKind::kIndexAccessOp) {
         // List index access
         binaryExpr->accept(*this);
