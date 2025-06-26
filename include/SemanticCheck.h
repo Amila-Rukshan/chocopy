@@ -76,6 +76,9 @@ public:
         return false;
       auto subTypeBase = subType.substr(0, subPos);
       auto superTypeBase = superType.substr(0, superPos);
+      if (subTypeBase == "<Empty>") {
+        return true;
+      }
       return isSubTypeOf(subTypeBase, superTypeBase);
     }
 

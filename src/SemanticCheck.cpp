@@ -173,9 +173,9 @@ void SemanticCheckVisitor::visitLiteralNone(const LiteralNoneAST& literalNone) {
 
 void SemanticCheckVisitor::visitListLiteralExpr(
     const ListLiteralExprAST& listLiteralExpr) {
-  size_t maxDepth = -1;
+  size_t maxDepth = 1;
   size_t elementCount = 0;
-  std::string listLiteralType = "UNTYPED";
+  std::string listLiteralType = "<Empty>";
   std::stack<std::pair<const ListLiteralExprAST*, size_t>> stack;
   stack.push({&listLiteralExpr, 1});
   while (!stack.empty()) {
@@ -185,10 +185,11 @@ void SemanticCheckVisitor::visitListLiteralExpr(
       if (auto* inner = llvm::dyn_cast<ListLiteralExprAST>(element.get())) {
         inner->accept(*this);
         stack.push({inner, depth + 1});
+        if (maxDepth < depth + 1) {
+          maxDepth = depth + 1;
+        }
       } else if (auto* literal =
                      llvm::dyn_cast<LiteralExprAST>(element.get())) {
-        if (maxDepth == -1)
-          maxDepth = depth;
         if (maxDepth != depth) {
           errors.push_back(SemanticError(
               literal->loc().line, literal->loc().col,
@@ -618,6 +619,10 @@ void SemanticCheckVisitor::visitIfElseExpr(const IfElseExprAST& ifElseExpr) {
 
 std::string SemanticCheckVisitor::typeUnion(const std::string& lhsType,
                                             const std::string& rhsType) {
+  if (lhsType == "<Empty>")
+    return rhsType;
+  if (rhsType == "<Empty>")
+    return lhsType;
   if (lhsType == "UNTYPED")
     return rhsType;
   else if (rhsType == "UNTYPED")

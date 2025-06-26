@@ -369,9 +369,9 @@ void LLVMCodeGenVisitor::visitListLiteralExpr(
         items.push_back(element->getCodegenValue());
       }
     }
-
-    llvm::Type* elemType =
-        llvmTypeOrClassPtrType(node.getElements()[0]->getTypeInfo());
+    auto& elements = node.getElements();
+    llvm::Type* elemType = llvmTypeOrClassPtrType(
+        !elements.empty() ? elements[0]->getTypeInfo() : "<Empty>");
     size_t arraySize =
         module->getDataLayout().getTypeAllocSize(elemType) * items.size();
     llvm::Value* arrayMallocSize =
@@ -1418,6 +1418,9 @@ LLVMCodeGenVisitor::getOrCreateGlobalFmtStr(const std::string& str,
 
 llvm::Type*
 LLVMCodeGenVisitor::llvmTypeOrClassPtrType(const std::string& typeName) {
+  if (typeName == "<Empty>") {
+    return llvmClass("object")->getPointerTo();
+  }
   llvm::Type* type = llvmType(typeName);
   if (type == nullptr) {
     size_t pos = typeName.find('[');

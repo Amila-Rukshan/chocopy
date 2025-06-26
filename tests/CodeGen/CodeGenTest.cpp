@@ -64,7 +64,9 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"16", "FirstSecond\n"},
       {"17", "True\nA\nE\nI\nO\nU\n"},
       {"18", "12\nAa\n79\nAaaA\n101\nAadD\n"},
-      {"19", "100\n1\n23\n11\n4\n200\n6\n7\n8\n9\n300\n"}};
+      {"19", "100\n1\n23\n11\n4\n200\n6\n7\n8\n9\n300\n"},
+      {"20", "6\n8\nTrue\n8\n6\nTrue\n"},
+      {"21", "4\n3\n0\n4\n-6\n0\n"}};
 
   for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;
