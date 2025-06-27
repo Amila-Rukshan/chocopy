@@ -1290,6 +1290,16 @@ void LLVMCodeGenVisitor::visitStmtWhile(const StmtWhileAST& stmtWhile) {
   builder->SetInsertPoint(whileMerge);
 }
 
+void LLVMCodeGenVisitor::visitStmtFor(const StmtForAST& stmtFor) {
+  llvm::Function* currentFunc = builder->GetInsertBlock()->getParent();
+
+  // TODO:
+  // define a stack var for enumeration variable
+  // another var with int with len of expr
+  // then decrement it until becomes zero (loop condition)
+  // each time access the ith element and assign to enumeration variable
+}
+
 void LLVMCodeGenVisitor::visitSimpleStmtReturn(
     const SimpleStmtReturnAST& simpleStmtReturn) {
   if (simpleStmtReturn.getExpr()) {

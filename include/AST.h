@@ -42,6 +42,7 @@ class StmtIfAST;
 
 class IfElseExprAST;
 class StmtWhileAST;
+class StmtForAST;
 
 class ASTVisitor {
 public:
@@ -76,6 +77,7 @@ public:
 
   virtual void visitStmtIf(const StmtIfAST& stmtIf) = 0;
   virtual void visitStmtWhile(const StmtWhileAST& stmtWhile) = 0;
+  virtual void visitStmtFor(const StmtForAST& stmtFor) = 0;
 };
 
 /***********************************/
@@ -866,19 +868,19 @@ class StmtIfAST : public StmtAST {
 public:
   StmtIfAST(Location location, std::unique_ptr<ExprAST> condition,
             std::vector<std::unique_ptr<StmtAST>> body,
-            std::vector<std::unique_ptr<StmtIfAST>> elifs,
             std::vector<std::unique_ptr<StmtAST>> elseBody)
       : StmtAST(StmtASTKind::Stmt_If, std::move(location)),
         condition(std::move(condition)), body(std::move(body)),
-        elifs(std::move(elifs)), elseBody(std::move(elseBody)) {}
+        elseBody(std::move(elseBody)) {}
 
   const ExprAST* getCondition() const { return condition.get(); }
   const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
-  const std::vector<std::unique_ptr<StmtIfAST>>& getElifs() const {
-    return elifs;
-  }
   const std::vector<std::unique_ptr<StmtAST>>& getElseBody() const {
     return elseBody;
+  }
+
+  void setElse(std::vector<std::unique_ptr<StmtAST>>&& elseBlock) {
+    elseBody = std::move(elseBlock);
   }
 
   void accept(ASTVisitor& visitor) const override {
@@ -893,7 +895,6 @@ public:
 private:
   std::unique_ptr<ExprAST> condition;
   std::vector<std::unique_ptr<StmtAST>> body;
-  std::vector<std::unique_ptr<StmtIfAST>> elifs;
   std::vector<std::unique_ptr<StmtAST>> elseBody;
 };
 
@@ -927,12 +928,16 @@ public:
              std::unique_ptr<TypedVarAST> typedVar,
              std::vector<std::unique_ptr<StmtAST>> body)
       : StmtAST(StmtASTKind::Stmt_For, std::move(location)),
-        expr(std::move(expr)), body(std::move(body)) {}
+        expr(std::move(expr)), typedVar(std::move(typedVar)),
+        body(std::move(body)) {}
 
   const ExprAST* getExpr() const { return expr.get(); }
   const std::vector<std::unique_ptr<StmtAST>>& getBody() const { return body; }
+  TypedVarAST* getTypedVar() const { return typedVar.get(); }
 
-  void accept(ASTVisitor& visitor) const override {}
+  void accept(ASTVisitor& visitor) const override {
+    visitor.visitStmtFor(*this);
+  }
 
   /// LLVM style RTTI
   static bool classof(const StmtAST* c) {
@@ -940,6 +945,7 @@ public:
   }
 
 private:
+  std::unique_ptr<TypedVarAST> typedVar;
   std::unique_ptr<ExprAST> expr;
   std::vector<std::unique_ptr<StmtAST>> body;
 };

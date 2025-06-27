@@ -7,16 +7,14 @@ class FizzBuzz(object):
             if n % 3 == 0 and n % 5 == 0:
                 count = count + 2
                 print("FizzBuzz")
+            elif n % 3 == 0:
+                count = count + 1
+                print("Fizz")
+            elif n % 5 == 0:
+                count = count + 1
+                print("Buzz")
             else:
-                if n % 3 == 0:
-                    count = count + 1
-                    print("Fizz")
-                else:
-                    if n % 5 == 0:
-                        count = count + 1
-                        print("Buzz")
-                    else:
-                        print(n)
+                print(n)
             n = n - 1
         return count
     

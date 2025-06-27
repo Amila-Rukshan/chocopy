@@ -297,8 +297,7 @@ private:
         std::vector<std::unique_ptr<StmtAST>> elifBody = parseBlock();
         elifs.push_back(std::make_unique<StmtIfAST>(
             lexer.getLastLocation(), std::move(elifCondition),
-            std::move(elifBody), std::vector<std::unique_ptr<StmtIfAST>>{},
-            std::vector<std::unique_ptr<StmtAST>>{}));
+            std::move(elifBody), std::vector<std::unique_ptr<StmtAST>>{}));
       }
     }
 
@@ -310,9 +309,36 @@ private:
       elseBody = parseBlock();
     }
 
+    /* Rewrite else-if blocks as nested if-else blocks
+      if {expr1}:
+        {body1}
+      elif {expr2}:
+        {body2}
+      elif {expr3}:
+        {body3}
+
+      is equivalent to:
+
+      if {expr1}:
+        {body1}
+      else:
+        if {expr2}:
+          {body2}
+        else:
+          if {expr3}:
+            {body3}
+     */
+    std::vector<std::unique_ptr<StmtAST>> currentElse = std::move(elseBody);
+
+    for (int elIfIdx = elifs.size() - 1; elIfIdx >= 0; --elIfIdx) {
+      elifs[elIfIdx]->setElse(std::move(currentElse));
+      currentElse.clear();
+      currentElse.push_back(std::move(elifs[elIfIdx]));
+    }
+
     return std::make_unique<StmtIfAST>(lexer.getLastLocation(),
                                        std::move(condition), std::move(body),
-                                       std::move(elifs), std::move(elseBody));
+                                       std::move(currentElse));
   }
 
   std::unique_ptr<SimpleStmtAST> parseSimpleStmt() {

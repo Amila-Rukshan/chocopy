@@ -188,16 +188,15 @@ void SemanticCheckVisitor::visitListLiteralExpr(
         if (maxDepth < depth + 1) {
           maxDepth = depth + 1;
         }
-      } else if (auto* literal =
-                     llvm::dyn_cast<LiteralExprAST>(element.get())) {
+      } else if (llvm::isa<LiteralExprAST, CallExprAST>(element.get())) {
         if (maxDepth != depth) {
           errors.push_back(SemanticError(
-              literal->loc().line, literal->loc().col,
+              element->loc().line, element->loc().col,
               "List elements must have the same depth in a list literal\n"));
         }
         elementCount++;
-        literal->accept(*this);
-        listLiteralType = typeUnion(listLiteralType, literal->getTypeInfo());
+        element->accept(*this);
+        listLiteralType = typeUnion(listLiteralType, element->getTypeInfo());
       }
     }
   }
@@ -770,9 +769,6 @@ void SemanticCheckVisitor::visitStmtIf(const StmtIfAST& stmtIf) {
   for (const auto& ifBodyStmt : stmtIf.getBody()) {
     ifBodyStmt->accept(*this);
   }
-  for (const auto& elIfBlock : stmtIf.getElifs()) {
-    elIfBlock->accept(*this);
-  }
   for (const auto& elseBodyStmt : stmtIf.getElseBody()) {
     elseBodyStmt->accept(*this);
   }
@@ -789,6 +785,21 @@ void SemanticCheckVisitor::visitStmtWhile(const StmtWhileAST& stmtWhile) {
   }
   for (const auto& whileBodyStmt : stmtWhile.getBody()) {
     whileBodyStmt->accept(*this);
+  }
+}
+
+void SemanticCheckVisitor::visitStmtFor(const StmtForAST& stmtFor) {
+  stmtFor.getExpr()->accept(*this);
+  auto type = stmtFor.getExpr()->getTypeInfo();
+  if (type != "str" && !isListType(type)) {
+    errors.push_back(SemanticError(
+        stmtFor.getExpr()->loc().line, stmtFor.getExpr()->loc().col,
+        "For loop can only enumerate 'list' or 'str' values\n"));
+  }
+  if (type == "str") {
+    stmtFor.getTypedVar()->setTypeInfo("str");
+  } else if (isListType(type)) {
+    stmtFor.getTypedVar()->setTypeInfo(getInnerType(type));
   }
 }
 

@@ -52,6 +52,7 @@ public:
 
   void visitStmtIf(const StmtIfAST& stmtIf) override;
   void visitStmtWhile(const StmtWhileAST& stmtWhile) override;
+  void visitStmtFor(const StmtForAST& stmtFor) override;
 
 private:
   void createBuiltinFuncDecl(const std::string& funcName,

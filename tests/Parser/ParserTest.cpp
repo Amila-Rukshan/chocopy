@@ -650,11 +650,8 @@ else:
   ASSERT_EQ(simpleStmts.size(), 1);
   auto simpleStmt1 = llvm::dyn_cast<StmtIfAST>(simpleStmts[0].get());
   ASSERT_NE(simpleStmt1, nullptr);
-  EXPECT_EQ(simpleStmt1->getElifs().size(), 2);
-  EXPECT_EQ(simpleStmt1->getElseBody().size(), 2);
+  EXPECT_EQ(simpleStmt1->getElseBody().size(), 1);
   EXPECT_EQ(simpleStmt1->getBody().size(), 1);
-  EXPECT_EQ(simpleStmt1->getElifs()[0]->getBody().size(), 2);
-  EXPECT_EQ(simpleStmt1->getElifs()[1]->getBody().size(), 2);
 }
 
 TEST(ParserTest, TestWhileStatement) {
@@ -734,7 +731,6 @@ while x > 0:
   auto innerIfStmt = llvm::dyn_cast<StmtIfAST>(simpleStmt2->getBody()[0].get());
   ASSERT_NE(innerIfStmt, nullptr);
   EXPECT_EQ(innerIfStmt->getBody().size(), 1);
-  EXPECT_EQ(innerIfStmt->getElifs().size(), 0);
   EXPECT_EQ(innerIfStmt->getElseBody().size(), 1);
 
   auto simpleStmt3 =
