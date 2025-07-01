@@ -501,16 +501,16 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       llvm::errs() << "Unknown operands in binary expression\n";
       return;
     }
-    if (binaryExpr.getLhs()->getTypeInfo() == "str" &&
-        binaryExpr.getRhs()->getTypeInfo() == "str") {
+    auto lhsType = binaryExpr.getLhs()->getTypeInfo();
+    auto rhsType = binaryExpr.getRhs()->getTypeInfo();
+    if (lhsType == "str" && rhsType == "str") {
       llvm::Function* strConcatFunc = module->getFunction("strconcat");
       llvm::FunctionType* strConcatFuncType = strConcatFunc->getFunctionType();
       std::vector<llvm::Value*> args = {lhsVal, rhsVal};
       llvm::Value* concatVal = builder->CreateCall(
           strConcatFuncType, strConcatFunc, args, "concat_strings");
       binaryExpr.setCodegenValue(concatVal);
-    } else if (binaryExpr.getLhs()->getTypeInfo() == "int" &&
-               binaryExpr.getRhs()->getTypeInfo() == "int") {
+    } else if (lhsType == "int" && rhsType == "int") {
       llvm::Value* sumVal = builder->CreateAdd(lhsVal, rhsVal, "sum_ints");
       binaryExpr.setCodegenValue(sumVal);
     } else {
@@ -823,6 +823,19 @@ void LLVMCodeGenVisitor::visitIfElseExpr(const IfElseExprAST& ifElseExpr) {
 
 void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
   if (currentClass == nullptr && currentFunction == nullptr) {
+    llvm::Value* localVar = localVariables[idExpr.getId()];
+    if (localVar != nullptr) {
+      // only load primitive types
+      if (!llvmClass(localVariableType[idExpr.getId()])) {
+        llvm::Value* localVarVal = builder->CreateLoad(
+            static_cast<llvm::AllocaInst*>(localVar)->getAllocatedType(),
+            localVar, "local_var_val");
+        idExpr.setCodegenValue(localVarVal);
+      } else {
+        idExpr.setCodegenValue(localVar);
+      }
+      return;
+    }
     llvm::GlobalVariable* globalVar = globalVariables[idExpr.getId()];
     if (globalVar == nullptr) {
       llvm::errs() << "Unknown global variable: " << idExpr.getId() << "\n";
@@ -1293,11 +1306,125 @@ void LLVMCodeGenVisitor::visitStmtWhile(const StmtWhileAST& stmtWhile) {
 void LLVMCodeGenVisitor::visitStmtFor(const StmtForAST& stmtFor) {
   llvm::Function* currentFunc = builder->GetInsertBlock()->getParent();
 
-  // TODO:
-  // define a stack var for enumeration variable
-  // another var with int with len of expr
-  // then decrement it until becomes zero (loop condition)
-  // each time access the ith element and assign to enumeration variable
+  // Evaluate the iterable expression
+  const ExprAST* iterableExpr = stmtFor.getExpr();
+  iterableExpr->accept(*this);
+  llvm::Value* iterableVal = iterableExpr->getCodegenValue();
+  std::string iterableType = iterableExpr->getTypeInfo();
+
+  // Allocate index variable (int i = 0)
+  llvm::AllocaInst* indexAlloca = builder->CreateAlloca(
+      llvm::Type::getInt32Ty(*context), nullptr, "for_index");
+  builder->CreateStore(
+      llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), indexAlloca);
+
+  // Allocate length variable
+  llvm::AllocaInst* lengthAlloca = builder->CreateAlloca(
+      llvm::Type::getInt32Ty(*context), nullptr, "for_length");
+
+  // Compute length
+  llvm::Value* lengthVal = nullptr;
+  if (iterableType == "str") {
+    llvm::Function* strLenFunc = module->getFunction("strlength");
+    lengthVal = builder->CreateCall(strLenFunc, {iterableVal}, "str_len");
+  } else {
+    // List type: get length from struct
+    llvm::StructType* listStructTy =
+        llvm::StructType::get(*context,
+                              {llvm::Type::getInt32Ty(*context),
+                               llvmTypeOrClassPtrType(iterableType)},
+                              false);
+    llvm::Value* listStructPtr = builder->CreateLoad(
+        listStructTy->getPointerTo(), iterableVal, "list_ptr_val");
+    llvm::Value* lengthPtr =
+        builder->CreateStructGEP(listStructTy, listStructPtr, 0, "length_ptr");
+    lengthVal = builder->CreateLoad(llvm::Type::getInt32Ty(*context), lengthPtr,
+                                    "length_val");
+  }
+  builder->CreateStore(lengthVal, lengthAlloca);
+
+  // Allocate loop variable
+  TypedVarAST* loopVar = stmtFor.getTypedVar();
+  std::string loopVarType = loopVar->getTypeInfo();
+  llvm::Type* llvmLoopVarType = llvmTypeOrClassPtrType(loopVarType);
+  llvm::AllocaInst* loopVarAlloca =
+      builder->CreateAlloca(llvmLoopVarType, nullptr, loopVar->getId());
+  localVariables[loopVar->getId()] = loopVarAlloca;
+  localVariableType[loopVar->getId()] = llvm::StringRef(loopVarType);
+
+  // Create basic blocks
+  llvm::BasicBlock* forCond =
+      llvm::BasicBlock::Create(*context, "for_cond", currentFunc);
+  llvm::BasicBlock* forBody =
+      llvm::BasicBlock::Create(*context, "for_body", currentFunc);
+  llvm::BasicBlock* forMerge =
+      llvm::BasicBlock::Create(*context, "for_merge", currentFunc);
+
+  // Branch to condition block
+  builder->CreateBr(forCond);
+
+  // Emit condition block
+  builder->SetInsertPoint(forCond);
+  llvm::Value* idxVal = builder->CreateLoad(llvm::Type::getInt32Ty(*context),
+                                            indexAlloca, "idx_val");
+  llvm::Value* lenVal = builder->CreateLoad(llvm::Type::getInt32Ty(*context),
+                                            lengthAlloca, "len_val");
+  llvm::Value* condVal = builder->CreateICmpSLT(idxVal, lenVal, "for_cond");
+  builder->CreateCondBr(condVal, forBody, forMerge);
+
+  // Emit body block
+  builder->SetInsertPoint(forBody);
+  excludeBlockStack.push_back(forMerge);
+  // Get element at idxVal
+  llvm::Value* elemVal = nullptr;
+  if (iterableType == "str") {
+    llvm::Function* strIdxFunc = module->getFunction("stridx");
+    elemVal =
+        builder->CreateCall(strIdxFunc, {iterableVal, idxVal}, "stridx_call");
+  } else {
+    // List index access
+    llvm::StructType* listStructTy =
+        llvm::StructType::get(*context,
+                              {llvm::Type::getInt32Ty(*context),
+                               llvmTypeOrClassPtrType(iterableType)},
+                              false);
+    llvm::Value* listStructPtr = builder->CreateLoad(
+        listStructTy->getPointerTo(), iterableVal, "list_ptr_val");
+    llvm::Value* arrayPtrPtr =
+        builder->CreateStructGEP(listStructTy, listStructPtr, 1, "array_ptr");
+    llvm::Value* arrayPtr = builder->CreateLoad(
+        listStructTy->getStructElementType(1), arrayPtrPtr, "array_val");
+    llvm::Value* elemPtr = builder->CreateGEP(
+        llvmTypeOrClassPtrType(loopVarType), arrayPtr, idxVal, "elem_ptr");
+    elemVal = builder->CreateLoad(llvmTypeOrClassPtrType(loopVarType), elemPtr,
+                                  "elem_val");
+  }
+  // Store element in loop variable
+  builder->CreateStore(elemVal, loopVarAlloca);
+
+  // Emit body statements
+  for (const auto& stmt : stmtFor.getBody()) {
+    stmt->accept(*this);
+  }
+
+  // Increment index
+  llvm::Value* nextIdx = builder->CreateAdd(
+      idxVal, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1),
+      "next_idx");
+  builder->CreateStore(nextIdx, indexAlloca);
+
+  // Get any unterminated blocks in the body
+  auto unterminated = getUnterminatedBlocks(currentFunc);
+  for (auto* block : unterminated) {
+    builder->SetInsertPoint(block);
+    if (!block->getTerminator()) {
+      builder->CreateBr(forCond);
+    }
+  }
+  excludeBlockStack.pop_back();
+
+  // Set insert point to merge block for code after the loop
+  builder->SetInsertPoint(forMerge);
 }
 
 void LLVMCodeGenVisitor::visitSimpleStmtReturn(

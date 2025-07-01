@@ -301,7 +301,10 @@ void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
 
 void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
   if (currentClass == nullptr && currentFunction == nullptr) {
-    if (globalVarToType.find(idExpr.getId().str()) != globalVarToType.end()) {
+    if (localVarToType.find(idExpr.getId().str()) != localVarToType.end()) {
+      idExpr.setTypeInfo(localVarToType.at(idExpr.getId().str()));
+    } else if (globalVarToType.find(idExpr.getId().str()) !=
+               globalVarToType.end()) {
       idExpr.setTypeInfo(globalVarToType.at(idExpr.getId().str()));
     }
   } else if (currentClass != nullptr && currentFunction != nullptr) {
@@ -800,6 +803,11 @@ void SemanticCheckVisitor::visitStmtFor(const StmtForAST& stmtFor) {
     stmtFor.getTypedVar()->setTypeInfo("str");
   } else if (isListType(type)) {
     stmtFor.getTypedVar()->setTypeInfo(getInnerType(type));
+  }
+  localVarToType[stmtFor.getTypedVar()->getId().str()] =
+      stmtFor.getTypedVar()->getTypeInfo();
+  for (const auto& forBodyStmt : stmtFor.getBody()) {
+    forBodyStmt->accept(*this);
   }
 }
 
