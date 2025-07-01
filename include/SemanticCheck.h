@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "AST.h"
+#include "Utils.h"
 
 namespace chocopy {
 
@@ -95,11 +96,6 @@ public:
       subClass = const_cast<ClassAST*>(subClass->getParentClass());
     }
     return false;
-  }
-
-  inline bool isListType(const std::string& type) {
-    return type.find('[') != std::string::npos &&
-           type.find(']') != std::string::npos;
   }
 
   inline std::string getInnerType(const std::string& type) {

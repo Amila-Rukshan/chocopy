@@ -1396,8 +1396,12 @@ void LLVMCodeGenVisitor::visitStmtFor(const StmtForAST& stmtFor) {
         listStructTy->getStructElementType(1), arrayPtrPtr, "array_val");
     llvm::Value* elemPtr = builder->CreateGEP(
         llvmTypeOrClassPtrType(loopVarType), arrayPtr, idxVal, "elem_ptr");
-    elemVal = builder->CreateLoad(llvmTypeOrClassPtrType(loopVarType), elemPtr,
-                                  "elem_val");
+    if (isListType(loopVarType)) {
+      elemVal = elemPtr;
+    } else {
+      elemVal = builder->CreateLoad(llvmTypeOrClassPtrType(loopVarType),
+                                    elemPtr, "elem_val");
+    }
   }
   // Store element in loop variable
   builder->CreateStore(elemVal, loopVarAlloca);

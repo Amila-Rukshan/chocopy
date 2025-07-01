@@ -12,6 +12,7 @@
 #include "llvm/IR/Type.h"
 
 #include "AST.h"
+#include "Utils.h"
 
 namespace chocopy {
 
