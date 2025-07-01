@@ -419,6 +419,8 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
   switch (binaryExpr.getOp()) {
   case TokenKind::kAttrAccessOp: {
     if (auto rhs = llvm::dyn_cast<CallExprAST>(binaryExpr.getRhs())) {
+      const_cast<ExprAST*>(binaryExpr.getLhs())
+          ->setAccessKind(AccessKind::DispatchArg);
       binaryExpr.getLhs()->accept(*this);
       std::string instanceType = binaryExpr.getLhs()->getTypeInfo();
 
@@ -743,7 +745,8 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
           builder->CreateGEP(llvmTypeOrClassPtrType(binaryExpr.getTypeInfo()),
                              arrayPtr, rhsVal, "elem_ptr");
       if (binaryExpr.getAccessKind() == AccessKind::Write ||
-          binaryExpr.getAccessKind() == AccessKind::ListAccess) {
+          binaryExpr.getAccessKind() == AccessKind::ListAccess ||
+          binaryExpr.getAccessKind() == AccessKind::DispatchArg) {
         binaryExpr.setCodegenValue(elemPtr);
         return;
       }
