@@ -70,7 +70,8 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"22",
        "12\n45\n23\nthis\nis\ncool\nTrue\nFalse\nTrue\nc\nh\no\nc\no\np\ny\n"},
       {"23", "True\nFalse\n"},
-      {"24", "test A\ntest B\ntest B\n"}};
+      {"24", "test A\ntest B\ntest B\n"},
+      {"25", "AA\nAA\nAA\nAA\n"}};
 
   for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;

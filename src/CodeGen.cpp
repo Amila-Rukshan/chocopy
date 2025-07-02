@@ -435,7 +435,16 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       size_t vTableIndex = getVTable(instanceType).getVTableIndex(llvmFunc);
 
       for (const auto& arg : rhs->getArgs()) {
+        auto type = arg->getTypeInfo();
         arg->accept(*this);
+        if (llvmClass(type)) {
+          if (auto idExpr = llvm::dyn_cast<IdExprAST>(arg.get())) {
+            llvm::Value* argVal = arg->getCodegenValue();
+            llvm::Value* loadedArgVal = builder->CreateLoad(
+                argVal->getType(), argVal, "loaded_arg_val");
+            arg->setCodegenValue(loadedArgVal);
+          }
+        }
       }
 
       // first arg is always the instance ptr
@@ -845,9 +854,7 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
       return;
     }
     llvm::Type* varType = globalVar->getValueType();
-    if (globalVariableTypes[idExpr.getId()] == "str" ||
-        globalVariableTypes[idExpr.getId()] == "int" ||
-        globalVariableTypes[idExpr.getId()] == "bool") {
+    if (isPrimitiveType(globalVariableTypes[idExpr.getId()])) {
       llvm::Value* globalVarVal =
           builder->CreateLoad(varType, globalVar, "global_var_val");
       idExpr.setCodegenValue(globalVarVal);
@@ -907,7 +914,16 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
 
 void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   for (auto& arg : callExpr.getArgs()) {
+    auto type = arg->getTypeInfo();
     arg->accept(*this);
+    if (llvmClass(type)) {
+      if (auto idExpr = llvm::dyn_cast<IdExprAST>(arg.get())) {
+        llvm::Value* argVal = arg->getCodegenValue();
+        llvm::Value* loadedArgVal =
+            builder->CreateLoad(argVal->getType(), argVal, "loaded_arg_val");
+        arg->setCodegenValue(loadedArgVal);
+      }
+    }
   }
   llvm::Function* calleeFunc = nullptr;
   bool isConstructorCall = false;
