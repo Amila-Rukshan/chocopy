@@ -497,7 +497,7 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
               ->getTypeName();
       llvm::Type* fieldType = llvmTypeOrClassPtrType(fieldTypeName);
       // only load primitive types
-      if (!llvmClass(fieldTypeName)) {
+      if (!llvmClass(fieldTypeName) && !isListType(fieldTypeName)) {
         fieldGEP = builder->CreateLoad(fieldType, fieldGEP, "field_val");
         binaryExpr.setCodegenValue(fieldGEP);
       } else {
@@ -966,8 +966,16 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
       }
       return;
     } else if (callee->getId() == "len") {
-      llvm::Value* listStructPtr = nullptr;
       auto& arg = callExpr.getArgs().front();
+      if (auto binaryExpr = llvm::dyn_cast<BinaryExprAST>(arg.get())) {
+        if (binaryExpr->getOp() == TokenKind::kAttrAccessOp) {
+          llvm::Value* loadedArgVal =
+              builder->CreateLoad(llvmTypeOrClassPtrType(arg->getTypeInfo()),
+                                  arg->getCodegenValue(), "loaded_arg_val");
+          arg->setCodegenValue(loadedArgVal);
+        }
+      }
+      llvm::Value* listStructPtr = nullptr;
       if (isListType(arg->getTypeInfo())) {
         llvm::StructType* listStructTy =
             llvm::StructType::get(*context,
