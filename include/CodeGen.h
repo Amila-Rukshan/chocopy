@@ -3,6 +3,7 @@
 
 #include <array>
 #include <map>
+#include <set>
 
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
@@ -102,6 +103,7 @@ private:
   std::map<llvm::StringRef, std::string> globalVariableTypes;
   std::map<llvm::StringRef, llvm::AllocaInst*> localVariables;
   std::map<llvm::StringRef, std::string> localVariableType;
+  std::set<std::string> loopIterVar;
 
   llvm::Constant* getOrCreateGlobalFmtStr(const std::string& str,
                                           const std::string& name);

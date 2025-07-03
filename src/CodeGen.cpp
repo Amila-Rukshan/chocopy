@@ -284,6 +284,9 @@ void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
     builder->CreateRet(llvmDefaultValue(func.getReturnType()->getTypeName()));
   }
   currentFunction = nullptr;
+  loopIterVar.clear();
+  localVariables.clear();
+  localVariableType.clear();
 };
 
 void LLVMCodeGenVisitor::codeGenMainFunc(
@@ -437,7 +440,7 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       for (const auto& arg : rhs->getArgs()) {
         auto type = arg->getTypeInfo();
         arg->accept(*this);
-        if (llvmClass(type)) {
+        if (llvmClass(type) || isListType(type)) {
           if (auto idExpr = llvm::dyn_cast<IdExprAST>(arg.get())) {
             llvm::Value* argVal = arg->getCodegenValue();
             llvm::Value* loadedArgVal = builder->CreateLoad(
@@ -838,7 +841,9 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
     llvm::Value* localVar = localVariables[idExpr.getId()];
     if (localVar != nullptr) {
       // only load primitive types
-      if (!llvmClass(localVariableType[idExpr.getId()])) {
+      if (isPrimitiveType(localVariableType[idExpr.getId()]) ||
+          (loopIterVar.find(idExpr.getId().str()) != loopIterVar.end() &&
+           !llvmClass(localVariableType[idExpr.getId()]))) {
         llvm::Value* localVarVal = builder->CreateLoad(
             static_cast<llvm::AllocaInst*>(localVar)->getAllocatedType(),
             localVar, "local_var_val");
@@ -871,7 +876,9 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
         return;
       }
       // only load primitive types
-      if (!llvmClass(localVariableType[idExpr.getId()])) {
+      if (isPrimitiveType(localVariableType[idExpr.getId()]) ||
+          (loopIterVar.find(idExpr.getId().str()) != loopIterVar.end() &&
+           !llvmClass(localVariableType[idExpr.getId()]))) {
         llvm::Value* localVarVal = builder->CreateLoad(
             static_cast<llvm::AllocaInst*>(localVar)->getAllocatedType(),
             localVar, "local_var_val");
@@ -884,7 +891,9 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
     llvm::Value* localVar = localVariables[idExpr.getId()];
     if (localVar != nullptr) {
       // only load primitive types
-      if (!llvmClass(localVariableType[idExpr.getId()])) {
+      if (isPrimitiveType(localVariableType[idExpr.getId()]) ||
+          (loopIterVar.find(idExpr.getId().str()) != loopIterVar.end() &&
+           !llvmClass(localVariableType[idExpr.getId()]))) {
         llvm::Value* localVarVal = builder->CreateLoad(
             static_cast<llvm::AllocaInst*>(localVar)->getAllocatedType(),
             localVar, "local_var_val");
@@ -899,9 +908,9 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
         return;
       }
       llvm::Type* varType = globalVar->getValueType();
-      if (globalVariableTypes[idExpr.getId()] == "str" ||
-          globalVariableTypes[idExpr.getId()] == "int" ||
-          globalVariableTypes[idExpr.getId()] == "bool") {
+      if (isPrimitiveType(globalVariableTypes[idExpr.getId()]) ||
+          (loopIterVar.find(idExpr.getId().str()) != loopIterVar.end() &&
+           !llvmClass(globalVariableTypes[idExpr.getId()]))) {
         llvm::Value* globalVarVal =
             builder->CreateLoad(varType, globalVar, "global_var_val");
         idExpr.setCodegenValue(globalVarVal);
@@ -916,7 +925,7 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   for (auto& arg : callExpr.getArgs()) {
     auto type = arg->getTypeInfo();
     arg->accept(*this);
-    if (llvmClass(type)) {
+    if (llvmClass(type) || isListType(type)) {
       if (auto idExpr = llvm::dyn_cast<IdExprAST>(arg.get())) {
         llvm::Value* argVal = arg->getCodegenValue();
         llvm::Value* loadedArgVal =
@@ -957,23 +966,24 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
       }
       return;
     } else if (callee->getId() == "len") {
+      llvm::Value* listStructPtr = nullptr;
       auto& arg = callExpr.getArgs().front();
-      size_t pos = arg->getTypeInfo().find('[');
-      if (pos != std::string::npos) {
+      if (isListType(arg->getTypeInfo())) {
         llvm::StructType* listStructTy =
             llvm::StructType::get(*context,
                                   {llvm::Type::getInt32Ty(*context),
                                    llvmTypeOrClassPtrType(arg->getTypeInfo())},
                                   false);
-        // Arg holds the ptr to the list struct
         llvm::Value* argStoragePtr = arg->getCodegenValue();
-        // Load the list struct pointer
-        llvm::Value* listStructPtr = builder->CreateLoad(
-            listStructTy->getPointerTo(), argStoragePtr, "list_ptr_val");
-        // Calulate GEP for length field from the struct
+        listStructPtr = argStoragePtr;
+        if (auto binaryExpr = llvm::dyn_cast<BinaryExprAST>(arg.get())) {
+          if (binaryExpr->getOp() == TokenKind::kIndexAccessOp) {
+            listStructPtr = builder->CreateLoad(listStructTy->getPointerTo(),
+                                                argStoragePtr, "list_ptr_val");
+          }
+        }
         llvm::Value* lengthPtr = builder->CreateStructGEP(
             listStructTy, listStructPtr, 0, "length_ptr");
-        // Load the length value
         llvm::Value* lengthVal = builder->CreateLoad(
             llvm::Type::getInt32Ty(*context), lengthPtr, "length_val");
         callExpr.setCodegenValue(lengthVal);
@@ -1370,6 +1380,7 @@ void LLVMCodeGenVisitor::visitStmtFor(const StmtForAST& stmtFor) {
       builder->CreateAlloca(llvmLoopVarType, nullptr, loopVar->getId());
   localVariables[loopVar->getId()] = loopVarAlloca;
   localVariableType[loopVar->getId()] = llvm::StringRef(loopVarType);
+  loopIterVar.insert(loopVar->getId().str());
 
   // Create basic blocks
   llvm::BasicBlock* forCond =
