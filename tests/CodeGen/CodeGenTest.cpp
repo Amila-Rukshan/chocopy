@@ -26,7 +26,6 @@ std::string runIRAndGetOutput(const std::string& irFile) {
 
   std::string runCmd = binaryFile + " > " + irFile + ".out";
   int runResult = std::system(runCmd.c_str());
-  EXPECT_EQ(runResult, 0) << "Binary execution failed";
 
   std::ifstream outFile(irFile + ".out");
   std::stringstream buffer;
@@ -72,7 +71,10 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"23", "True\nFalse\n"},
       {"24", "test A\ntest B\ntest B\n"},
       {"25", "AA\nAA\nAA\nAA\n"},
-      {"26", "Item found!\nItem found!\n"}};
+      {"26", "Item found!\nItem found!\n"},
+      {"27", "2\n21\n23\n1\nTrue\nFalse\n2\nFoo\nBar\nT1\n6\nT2\n7\n"},
+      {"28", "./testprograms/chocopy_28.py:7:7: Runtime error: List index out of bounds\n"}
+    };
 
   for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;

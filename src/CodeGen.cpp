@@ -74,6 +74,8 @@ void LLVMCodeGenVisitor::codeGen() {
   createBuiltinFuncDecl("strconcat", "str", {"str", "str"});
   createBuiltinFuncDecl("stridx", "str", {"str", "int"});
   createBuiltinFuncDecl("strlength", "int", {"str"});
+  createBuiltinFuncDecl("runtime_check", "int",
+                        {"int", "str", "str", "int", "int"});
 
   programAST->accept(*this);
 }
@@ -756,6 +758,36 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       llvm::Value* elemPtr =
           builder->CreateGEP(llvmTypeOrClassPtrType(binaryExpr.getTypeInfo()),
                              arrayPtr, rhsVal, "elem_ptr");
+
+      llvm::Value* arrayLengthPtr = builder->CreateStructGEP(
+          listStructType, listStructPtr, 0, "arr_length_ptr");
+      llvm::Value* lengthVal =
+          builder->CreateLoad(listStructType->getStructElementType(0),
+                              arrayLengthPtr, "length_val");
+
+      llvm::Function* runTimeCheckFn = module->getFunction("runtime_check");
+
+      // Index out of bound check
+      llvm::Value* inBounds =
+          builder->CreateICmpSLT(rhsVal, lengthVal, "idx_in_bounds");
+      llvm::Value* nonNegative = builder->CreateICmpSGE(
+          rhsVal, llvm::ConstantInt::get(rhsVal->getType(), 0),
+          "idx_non_negative");
+      llvm::Value* cond =
+          builder->CreateAnd(inBounds, nonNegative, "idx_valid");
+
+      llvm::Constant* fileStr =
+          getOrCreateGlobalFmtStr(*(binaryExpr.loc().file), ".src_file");
+      llvm::Constant* lineVal = llvm::ConstantInt::get(
+          llvm::Type::getInt32Ty(*context), binaryExpr.loc().line);
+      llvm::Constant* colVal = llvm::ConstantInt::get(
+          llvm::Type::getInt32Ty(*context), binaryExpr.loc().col);
+
+      llvm::Constant* errMsg = getOrCreateGlobalFmtStr(
+          "Runtime error: List index out of bounds", ".idx_oob");
+      builder->CreateCall(runTimeCheckFn,
+                          {cond, errMsg, fileStr, lineVal, colVal});
+
       if (binaryExpr.getAccessKind() == AccessKind::Write ||
           binaryExpr.getAccessKind() == AccessKind::ListAccess ||
           binaryExpr.getAccessKind() == AccessKind::DispatchArg) {

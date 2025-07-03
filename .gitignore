@@ -11,3 +11,5 @@ class.cpp.md
 tests-choco
 /testprograms/chco.py.ll
 string.o
+support.o
+runtime.o
