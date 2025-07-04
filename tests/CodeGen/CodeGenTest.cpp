@@ -75,7 +75,11 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"27", "2\n21\n23\n1\nTrue\nFalse\n2\nFoo\nBar\nT1\n6\nT2\n7\n"},
       {"28", "./testprograms/chocopy_28.py:7:7: Runtime error: List index out "
              "of bounds\n"},
-      {"29", "new\n4\n2\n0\n9\n4\nQQqQQ\nPPpPP\n"}};
+      {"29", "new\n4\n2\n0\n9\n4\nQQqQQ\nPPpPP\n"},
+      {"30", "4\n77\n77\n77\n"},
+      {"31", "1\n2\n4\n4\n8\n8\n8\n8\n16\n16\n16\n16\n16\n16\n16\n16\n17\n18\n1"
+             "9\n20\n"}
+            };
 
   for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;

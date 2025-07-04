@@ -538,12 +538,23 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
 
       // Load list struct pointers
       llvm::Value* lhsListPtr = lhsVal;
-      if (auto idExpr = llvm::dyn_cast<IdExprAST>(binaryExpr.getLhs())) {
+      if (auto binExp = llvm::dyn_cast<BinaryExprAST>(binaryExpr.getLhs())) {
+        if (binExp->getOp() != TokenKind::kPlus) {
+          lhsListPtr = builder->CreateLoad(listStructType->getPointerTo(),
+                                           lhsVal, "lhs_list_ptr");
+        }
+      } else if (!llvm::isa<ListLiteralExprAST>(binaryExpr.getLhs())) {
         lhsListPtr = builder->CreateLoad(listStructType->getPointerTo(), lhsVal,
                                          "lhs_list_ptr");
       }
+
       llvm::Value* rhsListPtr = rhsVal;
-      if (auto idExpr = llvm::dyn_cast<IdExprAST>(binaryExpr.getRhs())) {
+      if (auto binExp = llvm::dyn_cast<BinaryExprAST>(binaryExpr.getRhs())) {
+        if (binExp->getOp() != TokenKind::kPlus) {
+          rhsListPtr = builder->CreateLoad(listStructType->getPointerTo(),
+                                           rhsVal, "rhs_list_ptr");
+        }
+      } else if (!llvm::isa<ListLiteralExprAST>(binaryExpr.getRhs())) {
         rhsListPtr = builder->CreateLoad(listStructType->getPointerTo(), rhsVal,
                                          "rhs_list_ptr");
       }
@@ -1537,8 +1548,12 @@ void LLVMCodeGenVisitor::visitStmtFor(const StmtForAST& stmtFor) {
                               {llvm::Type::getInt32Ty(*context),
                                llvmTypeOrClassPtrType(iterableType)},
                               false);
-    llvm::Value* listStructPtr = builder->CreateLoad(
-        listStructTy->getPointerTo(), iterableVal, "list_ptr_val");
+    llvm::Value* listStructPtr = iterableVal;
+    if (!llvm::isa<ListLiteralExprAST>(iterableExpr)) {
+      listStructPtr = builder->CreateLoad(listStructTy->getPointerTo(),
+                                          iterableVal, "list_ptr_val");
+    }
+
     llvm::Value* lengthPtr =
         builder->CreateStructGEP(listStructTy, listStructPtr, 0, "length_ptr");
     lengthVal = builder->CreateLoad(llvm::Type::getInt32Ty(*context), lengthPtr,
@@ -1592,8 +1607,11 @@ void LLVMCodeGenVisitor::visitStmtFor(const StmtForAST& stmtFor) {
                               {llvm::Type::getInt32Ty(*context),
                                llvmTypeOrClassPtrType(iterableType)},
                               false);
-    llvm::Value* listStructPtr = builder->CreateLoad(
-        listStructTy->getPointerTo(), iterableVal, "list_ptr_val");
+    llvm::Value* listStructPtr = iterableVal;
+    if (!llvm::isa<ListLiteralExprAST>(iterableExpr)) {
+      listStructPtr = builder->CreateLoad(listStructTy->getPointerTo(),
+                                          iterableVal, "list_ptr_val");
+    }
     llvm::Value* arrayPtrPtr =
         builder->CreateStructGEP(listStructTy, listStructPtr, 1, "array_ptr");
     llvm::Value* arrayPtr = builder->CreateLoad(
