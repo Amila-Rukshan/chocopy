@@ -382,6 +382,9 @@ void SemanticCheckVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       binaryExpr.setTypeInfo("str");
     } else if (lhsType == "int" && rhsType == "int") {
       binaryExpr.setTypeInfo("int");
+    } else if (isListType(lhsType) && isListType(rhsType) &&
+               lhsType == rhsType) {
+      binaryExpr.setTypeInfo(lhsType);
     } else {
       errors.push_back(
           SemanticError(binaryExpr.loc().line, binaryExpr.loc().col,

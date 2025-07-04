@@ -73,8 +73,9 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"25", "AA\nAA\nAA\nAA\n"},
       {"26", "Item found!\nItem found!\n"},
       {"27", "2\n21\n23\n1\nTrue\nFalse\n2\nFoo\nBar\nT1\n6\nT2\n7\n"},
-      {"28", "./testprograms/chocopy_28.py:7:7: Runtime error: List index out of bounds\n"}
-    };
+      {"28", "./testprograms/chocopy_28.py:7:7: Runtime error: List index out "
+             "of bounds\n"},
+      {"29", "new\n4\n2\n0\n9\n4\nQQqQQ\nPPpPP\n"}};
 
   for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;

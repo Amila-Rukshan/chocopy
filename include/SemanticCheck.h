@@ -95,16 +95,6 @@ public:
     return false;
   }
 
-  inline std::string getInnerType(const std::string& type) {
-    size_t first = type.find('[');
-    size_t last = type.rfind(']');
-    if (first == std::string::npos || last == std::string::npos ||
-        last <= first)
-      throw std::invalid_argument("Invalid list type format");
-    return type.substr(0, first) +
-           type.substr(first + 1, type.size() - first - 2);
-  }
-
 private:
   bool isDefinedType(const llvm::StringRef typeName) {
     return std::find(definedClassIds.begin(), definedClassIds.end(),

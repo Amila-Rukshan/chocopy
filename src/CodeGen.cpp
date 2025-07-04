@@ -529,6 +529,140 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
     } else if (lhsType == "int" && rhsType == "int") {
       llvm::Value* sumVal = builder->CreateAdd(lhsVal, rhsVal, "sum_ints");
       binaryExpr.setCodegenValue(sumVal);
+    } else if (isListType(lhsType) && isListType(rhsType)) {
+      // List concatenation: lhsVal and rhsVal are pointers to list structs
+      llvm::StructType* listStructType = llvm::StructType::get(
+          *context, {llvm::Type::getInt32Ty(*context),
+                     llvm::PointerType::get(*context, 0)});
+      llvm::Type* elemType = llvmTypeOrClassPtrType(getInnerType(lhsType));
+
+      // Load list struct pointers
+      llvm::Value* lhsListPtr = lhsVal;
+      if (auto idExpr = llvm::dyn_cast<IdExprAST>(binaryExpr.getLhs())) {
+        lhsListPtr = builder->CreateLoad(listStructType->getPointerTo(), lhsVal,
+                                         "lhs_list_ptr");
+      }
+      llvm::Value* rhsListPtr = rhsVal;
+      if (auto idExpr = llvm::dyn_cast<IdExprAST>(binaryExpr.getRhs())) {
+        rhsListPtr = builder->CreateLoad(listStructType->getPointerTo(), rhsVal,
+                                         "rhs_list_ptr");
+      }
+
+      // Get lengths
+      llvm::Value* lhsLenPtr = builder->CreateStructGEP(
+          listStructType, lhsListPtr, 0, "lhs_len_ptr");
+      llvm::Value* lhsLen = builder->CreateLoad(
+          llvm::Type::getInt32Ty(*context), lhsLenPtr, "lhs_len");
+      llvm::Value* rhsLenPtr = builder->CreateStructGEP(
+          listStructType, rhsListPtr, 0, "rhs_len_ptr");
+      llvm::Value* rhsLen = builder->CreateLoad(
+          llvm::Type::getInt32Ty(*context), rhsLenPtr, "rhs_len");
+      llvm::Value* totalLen = builder->CreateAdd(lhsLen, rhsLen, "total_len");
+
+      // Allocate new array
+      llvm::Value* allocSize = builder->CreateMul(
+          totalLen,
+          llvm::ConstantInt::get(
+              llvm::Type::getInt32Ty(*context),
+              module->getDataLayout().getTypeAllocSize(elemType)),
+          "alloc_size");
+
+      llvm::Value* newArrayRaw = builder->CreateCall(
+          module->getFunction("malloc"), allocSize, "concat_arr");
+      llvm::Value* newArray = builder->CreateBitCast(
+          newArrayRaw, elemType->getPointerTo(), "new_array");
+
+      // Get array pointers from both lists
+      llvm::Value* lhsArrPtrPtr = builder->CreateStructGEP(
+          listStructType, lhsListPtr, 1, "lhs_arr_ptr_ptr");
+      llvm::Value* lhsArr = builder->CreateLoad(elemType->getPointerTo(),
+                                                lhsArrPtrPtr, "lhs_arr");
+      llvm::Value* rhsArrPtrPtr = builder->CreateStructGEP(
+          listStructType, rhsListPtr, 1, "rhs_arr_ptr_ptr");
+      llvm::Value* rhsArr = builder->CreateLoad(elemType->getPointerTo(),
+                                                rhsArrPtrPtr, "rhs_arr");
+
+      // Copy elements from lhsArr to newArray
+      llvm::Function* currFunc = builder->GetInsertBlock()->getParent();
+      llvm::BasicBlock* copyLhsCond =
+          llvm::BasicBlock::Create(*context, "copy_lhs_cond", currFunc);
+      llvm::BasicBlock* copyLhsBody =
+          llvm::BasicBlock::Create(*context, "copy_lhs_body", currFunc);
+      llvm::BasicBlock* copyLhsEnd =
+          llvm::BasicBlock::Create(*context, "copy_lhs_end", currFunc);
+      llvm::AllocaInst* iAlloca =
+          builder->CreateAlloca(llvm::Type::getInt32Ty(*context), nullptr, "i");
+      builder->CreateStore(
+          llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), iAlloca);
+      builder->CreateBr(copyLhsCond);
+
+      // Copy elements from lhsArr to newArray
+      builder->SetInsertPoint(copyLhsCond);
+      llvm::Value* iVal = builder->CreateLoad(llvm::Type::getInt32Ty(*context),
+                                              iAlloca, "i_val");
+      llvm::Value* lhsCond = builder->CreateICmpSLT(iVal, lhsLen, "lhs_cond");
+      builder->CreateCondBr(lhsCond, copyLhsBody, copyLhsEnd);
+      builder->SetInsertPoint(copyLhsBody);
+      llvm::Value* srcPtr =
+          builder->CreateGEP(elemType, lhsArr, iVal, "src_ptr");
+      llvm::Value* val = builder->CreateLoad(elemType, srcPtr, "val");
+      llvm::Value* dstPtr =
+          builder->CreateGEP(elemType, newArray, iVal, "dst_ptr");
+      builder->CreateStore(val, dstPtr);
+      llvm::Value* iNext = builder->CreateAdd(
+          iVal, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1),
+          "i_next");
+      builder->CreateStore(iNext, iAlloca);
+      builder->CreateBr(copyLhsCond);
+
+      // End block for lhs copy
+      builder->SetInsertPoint(copyLhsEnd);
+
+      // Copy elements from rhsArr to newArray
+      llvm::BasicBlock* copyRhsCond =
+          llvm::BasicBlock::Create(*context, "copy_rhs_cond", currFunc);
+      llvm::BasicBlock* copyRhsBody =
+          llvm::BasicBlock::Create(*context, "copy_rhs_body", currFunc);
+      llvm::BasicBlock* copyRhsEnd =
+          llvm::BasicBlock::Create(*context, "copy_rhs_end", currFunc);
+      llvm::AllocaInst* jAlloca =
+          builder->CreateAlloca(llvm::Type::getInt32Ty(*context), nullptr, "j");
+      builder->CreateStore(
+          llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), jAlloca);
+      builder->CreateBr(copyRhsCond);
+      builder->SetInsertPoint(copyRhsCond);
+      llvm::Value* jVal = builder->CreateLoad(llvm::Type::getInt32Ty(*context),
+                                              jAlloca, "j_val");
+      llvm::Value* rhsCond = builder->CreateICmpSLT(jVal, rhsLen, "rhs_cond");
+      builder->CreateCondBr(rhsCond, copyRhsBody, copyRhsEnd);
+      builder->SetInsertPoint(copyRhsBody);
+      llvm::Value* srcPtrR =
+          builder->CreateGEP(elemType, rhsArr, jVal, "src_ptr_r");
+      llvm::Value* valR = builder->CreateLoad(elemType, srcPtrR, "val_r");
+      llvm::Value* dstPtrR = builder->CreateGEP(
+          elemType, newArray, builder->CreateAdd(jVal, lhsLen), "dst_ptr_r");
+      builder->CreateStore(valR, dstPtrR);
+      llvm::Value* jNext = builder->CreateAdd(
+          jVal, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1),
+          "j_next");
+      builder->CreateStore(jNext, jAlloca);
+      builder->CreateBr(copyRhsCond);
+      builder->SetInsertPoint(copyRhsEnd);
+
+      // Allocate new list struct
+      size_t structSize =
+          module->getDataLayout().getTypeAllocSize(listStructType);
+      llvm::Value* newListStruct = builder->CreateCall(
+          module->getFunction("malloc"),
+          llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), structSize),
+          "new_list_struct");
+      llvm::Value* newLenPtr = builder->CreateStructGEP(
+          listStructType, newListStruct, 0, "new_len_ptr");
+      builder->CreateStore(totalLen, newLenPtr);
+      llvm::Value* newArrPtr = builder->CreateStructGEP(
+          listStructType, newListStruct, 1, "new_arr_ptr");
+      builder->CreateStore(newArray, newArrPtr);
+      binaryExpr.setCodegenValue(newListStruct);
     } else {
       llvm::errs() << "Unsupported types for '+' operator\n";
     }
