@@ -18,6 +18,7 @@
 namespace chocopy {
 
 class VirtualTable;
+class ScopeManager;
 
 class LLVMCodeGenVisitor : public ASTVisitor {
 public:
@@ -101,9 +102,9 @@ private:
   std::unordered_map<std::string, llvm::Function*> functionNameToFunc;
   std::map<llvm::StringRef, llvm::GlobalVariable*> globalVariables;
   std::map<llvm::StringRef, std::string> globalVariableTypes;
-  std::map<llvm::StringRef, llvm::AllocaInst*> localVariables;
-  std::map<llvm::StringRef, std::string> localVariableType;
-  std::set<std::string> loopIterVar;
+  std::unique_ptr<ScopeManager> scopeManager;
+
+  std::unordered_map<const FunctionAST*, llvm::Function*> nestedFuncs;
 
   llvm::Constant* getOrCreateGlobalFmtStr(const std::string& str,
                                           const std::string& name);
@@ -122,6 +123,10 @@ private:
   std::vector<llvm::BasicBlock*> excludeBlockStack;
 };
 
+/***********************************/
+/* VirtualTable                    */
+/***********************************/
+
 class VirtualTable {
 public:
   VirtualTable(llvm::LLVMContext& context, const ClassAST* classAST)
@@ -139,6 +144,32 @@ private:
   llvm::StructType* virtualTableStructType;
   llvm::GlobalValue* globalVTableVal = nullptr;
   std::vector<llvm::Constant*> funcs;
+};
+
+/***********************************/
+/* ScopeManager                    */
+/***********************************/
+
+struct VarInfor {
+  llvm::Value* var;
+  const FunctionAST* funcPtr;
+  std::string type;
+  bool isIterVar;
+};
+
+class ScopeManager {
+public:
+  void pushScope();
+  void popScope();
+  void addVar(llvm::StringRef name, llvm::Value* alloca,
+              const FunctionAST* fnPtr, const std::string& type,
+              bool isIterVar = false);
+  const VarInfor* lookupVar(llvm::StringRef name) const;
+
+private:
+  // stack of mappings of stack variables (stack var value, type, is iteration
+  // var)
+  std::vector<std::map<std::string, VarInfor>> localVarStack;
 };
 
 } // namespace chocopy

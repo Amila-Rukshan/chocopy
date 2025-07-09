@@ -9,7 +9,9 @@ LLVMCodeGenVisitor::LLVMCodeGenVisitor(ProgramAST* program,
                                        llvm::StringRef programPath)
     : context(std::make_unique<llvm::LLVMContext>()),
       builder(std::make_unique<llvm::IRBuilder<>>(*context)),
-      programAST(program), programPath(programPath) {}
+      programAST(program), programPath(programPath) {
+  scopeManager = std::make_unique<ScopeManager>();
+}
 
 LLVMCodeGenVisitor::~LLVMCodeGenVisitor() {}
 
@@ -262,15 +264,18 @@ void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
       llvm::BasicBlock::Create(*context, "entrypoint", llvmFunction);
   builder->SetInsertPoint(entry);
 
+  scopeManager->pushScope();
+
   for (auto& param : llvmFunction->args()) {
     int paramIndex = param.getArgNo();
     llvm::Type* paramType =
         llvmFunction->getFunctionType()->getParamType(paramIndex);
     llvm::AllocaInst* alloca = builder->CreateAlloca(
         paramType, nullptr, func.getArgs().at(paramIndex)->getId());
-    localVariables[func.getArgs().at(paramIndex)->getId()] = alloca;
-    localVariableType[func.getArgs().at(paramIndex)->getId()] =
-        llvm::StringRef(func.getArgs()[paramIndex]->getType()->getTypeName());
+    auto argName = func.getArgs().at(paramIndex)->getId();
+    scopeManager->addVar(func.getArgs().at(paramIndex)->getId().str(), alloca,
+                         currentFunction,
+                         func.getArgs()[paramIndex]->getType()->getTypeName());
     builder->CreateStore(&param, alloca);
   }
 
@@ -286,9 +291,7 @@ void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
     builder->CreateRet(llvmDefaultValue(func.getReturnType()->getTypeName()));
   }
   currentFunction = nullptr;
-  loopIterVar.clear();
-  localVariables.clear();
-  localVariableType.clear();
+  scopeManager->popScope();
 };
 
 void LLVMCodeGenVisitor::codeGenMainFunc(
@@ -301,9 +304,11 @@ void LLVMCodeGenVisitor::codeGenMainFunc(
       llvm::BasicBlock::Create(*context, "entry", mainFunc);
   builder->SetInsertPoint(entryBlock);
 
+  scopeManager->pushScope();
   for (const auto& stmt : stmts) {
     stmt->accept(*this);
   }
+  scopeManager->popScope();
 
   builder->CreateRet(
       llvm::ConstantInt::getSigned(llvm::Type::getInt32Ty(*context), 0));
@@ -1015,12 +1020,11 @@ void LLVMCodeGenVisitor::visitIfElseExpr(const IfElseExprAST& ifElseExpr) {
 
 void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
   if (currentClass == nullptr && currentFunction == nullptr) {
-    llvm::Value* localVar = localVariables[idExpr.getId()];
-    if (localVar != nullptr) {
+    const VarInfor* varInfo = scopeManager->lookupVar(idExpr.getId());
+    if (varInfo) {
+      const auto& [localVar, _, type, isIterVar] = *varInfo;
       // only load primitive types
-      if (isPrimitiveType(localVariableType[idExpr.getId()]) ||
-          (loopIterVar.find(idExpr.getId().str()) != loopIterVar.end() &&
-           !llvmClass(localVariableType[idExpr.getId()]))) {
+      if (isPrimitiveType(type) || (isIterVar && !llvmClass(type))) {
         llvm::Value* localVarVal = builder->CreateLoad(
             static_cast<llvm::AllocaInst*>(localVar)->getAllocatedType(),
             localVar, "local_var_val");
@@ -1045,17 +1049,16 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
     }
   } else if (currentClass != nullptr && currentFunction != nullptr) {
     if (idExpr.getId() == "self") {
-      idExpr.setCodegenValue(localVariables[idExpr.getId()]);
+      idExpr.setCodegenValue((*(scopeManager->lookupVar(idExpr.getId()))).var);
     } else {
-      llvm::Value* localVar = localVariables[idExpr.getId()];
-      if (localVar == nullptr) {
+      const VarInfor* varInfo = scopeManager->lookupVar(idExpr.getId());
+      if (!varInfo) {
         llvm::errs() << "Unknown local variable: " << idExpr.getId() << "\n";
         return;
       }
+      const auto& [localVar, _, type, isIterVar] = *varInfo;
       // only load primitive types
-      if (isPrimitiveType(localVariableType[idExpr.getId()]) ||
-          (loopIterVar.find(idExpr.getId().str()) != loopIterVar.end() &&
-           !llvmClass(localVariableType[idExpr.getId()]))) {
+      if (isPrimitiveType(type) || (isIterVar && !llvmClass(type))) {
         llvm::Value* localVarVal = builder->CreateLoad(
             static_cast<llvm::AllocaInst*>(localVar)->getAllocatedType(),
             localVar, "local_var_val");
@@ -1065,12 +1068,11 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
       }
     }
   } else if (currentClass == nullptr && currentFunction != nullptr) {
-    llvm::Value* localVar = localVariables[idExpr.getId()];
-    if (localVar != nullptr) {
+    const VarInfor* varInfo = scopeManager->lookupVar(idExpr.getId());
+    if (varInfo) {
+      const auto& [localVar, _, type, isIterVar] = *varInfo;
       // only load primitive types
-      if (isPrimitiveType(localVariableType[idExpr.getId()]) ||
-          (loopIterVar.find(idExpr.getId().str()) != loopIterVar.end() &&
-           !llvmClass(localVariableType[idExpr.getId()]))) {
+      if (isPrimitiveType(type) || (isIterVar && !llvmClass(type))) {
         llvm::Value* localVarVal = builder->CreateLoad(
             static_cast<llvm::AllocaInst*>(localVar)->getAllocatedType(),
             localVar, "local_var_val");
@@ -1086,8 +1088,7 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
       }
       llvm::Type* varType = globalVar->getValueType();
       if (isPrimitiveType(globalVariableTypes[idExpr.getId()]) ||
-          (loopIterVar.find(idExpr.getId().str()) != loopIterVar.end() &&
-           !llvmClass(globalVariableTypes[idExpr.getId()]))) {
+          (!llvmClass(globalVariableTypes[idExpr.getId()]))) {
         llvm::Value* globalVarVal =
             builder->CreateLoad(varType, globalVar, "global_var_val");
         idExpr.setCodegenValue(globalVarVal);
@@ -1291,9 +1292,9 @@ void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
           varType, nullptr, varDef.getTypedVar()->getId());
       llvm::Constant* initialVal = llvmLiteralValue(*varDef.getLiteral());
       builder->CreateStore(initialVal, alloca);
-      localVariables[varDef.getTypedVar()->getId()] = alloca;
-      localVariableType[varDef.getTypedVar()->getId()] =
-          llvm::StringRef(varDef.getTypedVar()->getType()->getTypeName());
+      scopeManager->addVar(varDef.getTypedVar()->getId(), alloca,
+                           currentFunction,
+                           varDef.getTypedVar()->getType()->getTypeName());
     }
   } else {
     if (currentFunction == nullptr) {
@@ -1318,9 +1319,9 @@ void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
           varType, nullptr, varDef.getTypedVar()->getId());
       llvm::Constant* initialVal = llvmLiteralValue(*varDef.getLiteral());
       builder->CreateStore(initialVal, alloca);
-      localVariables[varDef.getTypedVar()->getId()] = alloca;
-      localVariableType[varDef.getTypedVar()->getId()] =
-          llvm::StringRef(varDef.getTypedVar()->getType()->getTypeName());
+      scopeManager->addVar(varDef.getTypedVar()->getId(), alloca,
+                           currentFunction,
+                           varDef.getTypedVar()->getType()->getTypeName());
     }
   }
 }
@@ -1567,9 +1568,8 @@ void LLVMCodeGenVisitor::visitStmtFor(const StmtForAST& stmtFor) {
   llvm::Type* llvmLoopVarType = llvmTypeOrClassPtrType(loopVarType);
   llvm::AllocaInst* loopVarAlloca =
       builder->CreateAlloca(llvmLoopVarType, nullptr, loopVar->getId());
-  localVariables[loopVar->getId()] = loopVarAlloca;
-  localVariableType[loopVar->getId()] = llvm::StringRef(loopVarType);
-  loopIterVar.insert(loopVar->getId().str());
+  scopeManager->addVar(loopVar->getId(), loopVarAlloca, currentFunction,
+                       loopVarType, true);
 
   // Create basic blocks
   llvm::BasicBlock* forCond =
@@ -1666,9 +1666,9 @@ void LLVMCodeGenVisitor::visitSimpleStmtReturn(
 }
 
 llvm::Value* LLVMCodeGenVisitor::lookupVariable(llvm::StringRef varName) {
-  llvm::Value* localVar = localVariables[varName];
-  if (localVar)
-    return localVar;
+  const VarInfor* varInfo = scopeManager->lookupVar(varName);
+  if (varInfo)
+    return (*varInfo).var;
   return globalVariables[varName];
 }
 
@@ -1819,6 +1819,8 @@ const ClassAST* LLVMCodeGenVisitor::getClassByName(std::string name) const {
 
 inline llvm::Function*
 LLVMCodeGenVisitor::llvmFunc(const FunctionAST* function) {
+  if (function->isNestedFunc())
+    return nestedFuncs.at(function);
   return functions.at(function);
 }
 
@@ -1859,6 +1861,31 @@ size_t VirtualTable::getVTableIndex(llvm::Constant* llvmFunc) const {
   assert(it != funcs.end() && "Function not found in vtable!\n");
   if (it != funcs.end())
     return std::distance(funcs.begin(), it);
+}
+
+/***********************************/
+/* ScopeManager                    */
+/***********************************/
+
+void ScopeManager::pushScope() { localVarStack.push_back({}); }
+
+void ScopeManager::popScope() { localVarStack.pop_back(); }
+
+void ScopeManager::addVar(llvm::StringRef name, llvm::Value* alloca,
+                          const FunctionAST* fnPtr, const std::string& type,
+                          bool isIterVar) {
+  localVarStack.back()[name.str()] = {alloca, fnPtr, type, isIterVar};
+}
+
+const VarInfor* ScopeManager::lookupVar(llvm::StringRef name) const {
+  for (auto scopeIt = localVarStack.rbegin(); scopeIt != localVarStack.rend();
+       ++scopeIt) {
+    auto found = scopeIt->find(name.str());
+    if (found != scopeIt->end()) {
+      return &found->second;
+    }
+  }
+  return nullptr;
 }
 
 } // namespace chocopy

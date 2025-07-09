@@ -154,7 +154,11 @@ public:
         returnType(std::move(returnType)), varDefs(std::move(varDefs)),
         globalDecls(std::move(globalDecls)),
         nonlocalDecls(std::move(nonlocalDecls)), funcDefs(std::move(funcDefs)),
-        body(std::move(body)) {}
+        body(std::move(body)) {
+    // Set parent-function relationship for nested functions
+    for (auto& innerFunc : this->funcDefs)
+      innerFunc->setParentFunc(this);
+  }
 
   const llvm::StringRef getId() const { return id; }
   const std::vector<std::unique_ptr<TypedVarAST>>& getArgs() const {
@@ -177,6 +181,10 @@ public:
 
   const Location& loc() const { return location; }
 
+  void setParentFunc(FunctionAST* parentFnPtr) { parentFunc = parentFnPtr; }
+
+  const bool isNestedFunc() const { return parentFunc != nullptr; }
+
 private:
   Location location;
   const std::string id;
@@ -187,6 +195,8 @@ private:
   std::vector<std::string> nonlocalDecls;
   std::vector<std::unique_ptr<FunctionAST>> funcDefs;
   std::vector<std::unique_ptr<StmtAST>> body;
+
+  FunctionAST* parentFunc = nullptr;
 };
 
 /***********************************/

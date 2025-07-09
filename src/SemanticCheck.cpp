@@ -80,13 +80,13 @@ void SemanticCheckVisitor::visitProgram(const ProgramAST& program) {
     clazz->accept(*this);
     currentClass = nullptr;
   }
+  for (auto& varDef : program.getVarDefs()) {
+    varDef->accept(*this);
+  }
   for (auto& globFunc : program.getFuncDefs()) {
     currentFunction = globFunc.get();
     globFunc->accept(*this);
     currentFunction = nullptr;
-  }
-  for (auto& varDef : program.getVarDefs()) {
-    varDef->accept(*this);
   }
   for (auto& stmt : program.getStmts()) {
     stmt->accept(*this);
@@ -102,9 +102,11 @@ void SemanticCheckVisitor::visitClass(const ClassAST& clazz) {
 }
 
 void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
-  definedFunctions[currentClass != nullptr
-                       ? currentClass->getId().str() + "-" + func.getId().str()
-                       : func.getId().str()] = &func;
+  if (!func.isNestedFunc()) {
+    definedFunctions[currentClass != nullptr ? currentClass->getId().str() +
+                                                   "-" + func.getId().str()
+                                             : func.getId().str()] = &func;
+  }
 
   for (auto& arg : func.getArgs()) {
     arg->accept(*this);
@@ -114,6 +116,10 @@ void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
   for (auto& localVar : func.getVarDefs()) {
     localVarToType[localVar->getTypedVar()->getId().str()] =
         localVar->getTypedVar()->getType()->getTypeName();
+  }
+
+  for (auto& nestedFunc : func.getFuncDefs()) {
+    nestedFunc->accept(*this);
   }
 
   // class methods type checks
