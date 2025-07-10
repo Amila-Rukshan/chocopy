@@ -185,6 +185,8 @@ public:
 
   const bool isNestedFunc() const { return parentFunc != nullptr; }
 
+  const FunctionAST* getParentFunc() const { return parentFunc; }
+
 private:
   Location location;
   const std::string id;

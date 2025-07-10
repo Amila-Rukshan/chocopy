@@ -4,6 +4,7 @@
 #include <array>
 #include <map>
 #include <set>
+#include <stack>
 
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
@@ -85,15 +86,18 @@ private:
   llvm::Constant* llvmDefaultValue(const std::string& typeName);
   llvm::Constant* llvmLiteralValue(const LiteralAST& literal);
   llvm::Function* llvmFunc(const FunctionAST* function);
+  void createNestedFuncDecl(const FunctionAST* nestedFunc);
   llvm::Value* lookupVariable(llvm::StringRef varName);
 
   std::unique_ptr<llvm::LLVMContext> context;
   std::unique_ptr<llvm::IRBuilder<>> builder;
   std::unique_ptr<llvm::Module> module;
 
+  FunctionAST* currentFunction();
+
   ProgramAST* programAST = nullptr;
   ClassAST* currentClass = nullptr;
-  FunctionAST* currentFunction = nullptr;
+  std::stack<FunctionAST*> functionStack;
   llvm::StringRef programPath;
 
   std::unordered_map<const ClassAST*, llvm::StructType*> classToStructType;

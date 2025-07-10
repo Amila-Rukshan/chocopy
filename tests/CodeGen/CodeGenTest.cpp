@@ -78,8 +78,8 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"29", "new\n4\n2\n0\n9\n4\nQQqQQ\nPPpPP\n"},
       {"30", "4\n77\n77\n77\n"},
       {"31", "1\n2\n4\n4\n8\n8\n8\n8\n16\n16\n16\n16\n16\n16\n16\n16\n17\n18\n1"
-             "9\n20\n"}
-            };
+             "9\n20\n"},
+      {"32", "foo called\ninner\nbar-inner\ndefault\nouter\n"}};
 
   for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;

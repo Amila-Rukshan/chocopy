@@ -119,7 +119,7 @@ private:
                                       std::move(funcDefs));
   }
 
-  std::unique_ptr<FunctionAST> parseFunction() {
+  std::unique_ptr<FunctionAST> parseFunction(bool isNested = false) {
     lexer.consume(TokenKind::k_def);
     std::string id = lexer.getIdentifier();
     Location idLocation = lexer.getLastLocation();
@@ -127,6 +127,11 @@ private:
 
     lexer.consume(TokenKind::kOpenParantheses);
     std::vector<std::unique_ptr<TypedVarAST>> args;
+    if (isNested) {
+      args.push_back(std::make_unique<TypedVarAST>(
+          "ref_env", idLocation,
+          std::make_unique<IdTypeAST>(idLocation, "object")));
+    }
     while (lexer.getCurToken() != TokenKind::kCloseParantheses) {
       std::string argId = lexer.getIdentifier();
       Location argLocation = lexer.getLastLocation();
@@ -192,7 +197,7 @@ private:
         break;
       }
       case TokenKind::k_def: {
-        funcDefs.push_back(parseFunction());
+        funcDefs.push_back(parseFunction(true));
         break;
       }
       default:

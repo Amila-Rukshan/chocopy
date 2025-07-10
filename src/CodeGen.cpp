@@ -15,6 +15,10 @@ LLVMCodeGenVisitor::LLVMCodeGenVisitor(ProgramAST* program,
 
 LLVMCodeGenVisitor::~LLVMCodeGenVisitor() {}
 
+FunctionAST* LLVMCodeGenVisitor::currentFunction() {
+  return functionStack.empty() ? nullptr : functionStack.top();
+}
+
 void LLVMCodeGenVisitor::printLLVMBitCode(llvm::StringRef outputPath) const {
   std::error_code error;
   llvm::raw_fd_ostream dest(outputPath.str() + ".ll", error);
@@ -108,8 +112,6 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
   }
 
   for (auto& globFunc : program.getFuncDefs()) {
-    currentFunction = globFunc.get();
-
     llvm::Type* retType =
         llvmTypeOrClassPtrType(globFunc->getReturnType()->getTypeName());
 
@@ -128,8 +130,6 @@ void LLVMCodeGenVisitor::visitProgram(const ProgramAST& program) {
     functions[globFunc.get()] = func;
 
     globFunc->accept(*this);
-
-    currentFunction = nullptr;
   }
 
   codeGenMainFunc(program.getStmts());
@@ -257,7 +257,7 @@ void LLVMCodeGenVisitor::visitClass(const ClassAST& clazz) {
 }
 
 void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
-  currentFunction = const_cast<FunctionAST*>(&func);
+  functionStack.push(const_cast<FunctionAST*>(&func));
   llvm::Function* llvmFunction = llvmFunc(&func);
 
   llvm::BasicBlock* entry =
@@ -274,7 +274,7 @@ void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
         paramType, nullptr, func.getArgs().at(paramIndex)->getId());
     auto argName = func.getArgs().at(paramIndex)->getId();
     scopeManager->addVar(func.getArgs().at(paramIndex)->getId().str(), alloca,
-                         currentFunction,
+                         (currentFunction()),
                          func.getArgs()[paramIndex]->getType()->getTypeName());
     builder->CreateStore(&param, alloca);
   }
@@ -283,6 +283,14 @@ void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
     localVar->accept(*this);
   }
 
+  for (auto& nestedFunc : func.getFuncDefs()) {
+    functionStack.push(nestedFunc.get());
+    nestedFunc->accept(*this);
+    functionStack.pop();
+  }
+
+  builder->SetInsertPoint(entry);
+
   for (const auto& stmt : func.getBody()) {
     stmt->accept(*this);
   }
@@ -290,7 +298,7 @@ void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
   if (!builder->GetInsertBlock()->getTerminator()) {
     builder->CreateRet(llvmDefaultValue(func.getReturnType()->getTypeName()));
   }
-  currentFunction = nullptr;
+  functionStack.pop();
   scopeManager->popScope();
 };
 
@@ -1019,7 +1027,7 @@ void LLVMCodeGenVisitor::visitIfElseExpr(const IfElseExprAST& ifElseExpr) {
 }
 
 void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
-  if (currentClass == nullptr && currentFunction == nullptr) {
+  if (currentClass == nullptr && currentFunction() == nullptr) {
     const VarInfor* varInfo = scopeManager->lookupVar(idExpr.getId());
     if (varInfo) {
       const auto& [localVar, _, type, isIterVar] = *varInfo;
@@ -1047,7 +1055,7 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
     } else {
       idExpr.setCodegenValue(globalVar);
     }
-  } else if (currentClass != nullptr && currentFunction != nullptr) {
+  } else if (currentClass != nullptr && currentFunction() != nullptr) {
     if (idExpr.getId() == "self") {
       idExpr.setCodegenValue((*(scopeManager->lookupVar(idExpr.getId()))).var);
     } else {
@@ -1067,7 +1075,7 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
         idExpr.setCodegenValue(localVar);
       }
     }
-  } else if (currentClass == nullptr && currentFunction != nullptr) {
+  } else if (currentClass == nullptr && currentFunction() != nullptr) {
     const VarInfor* varInfo = scopeManager->lookupVar(idExpr.getId());
     if (varInfo) {
       const auto& [localVar, _, type, isIterVar] = *varInfo;
@@ -1251,8 +1259,19 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
 
       callExpr.setCodegenValue(bitcast);
     } else {
-      // global function call
-      calleeFunc = module->getFunction(callee->getId());
+      // first check for nested function or a sibling function
+      auto currentFn = currentFunction();
+      if (currentFn) {
+        for (auto& innerFunc : currentFn->getFuncDefs()) {
+          if (innerFunc->getId().str() == callee->getId()) {
+            calleeFunc = nestedFuncs[innerFunc.get()];
+          }
+        }
+      }
+      // then look for a top level function
+      if (calleeFunc == nullptr) {
+        calleeFunc = module->getFunction(callee->getId());
+      }
     }
   }
   if (isConstructorCall) {
@@ -1276,7 +1295,7 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
 void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
   varDef.getLiteral()->accept(*this);
   if (currentClass != nullptr) {
-    if (currentFunction == nullptr) {
+    if (currentFunction() == nullptr) {
       // class var def (struct member)
       const std::string typeName =
           varDef.getTypedVar()->getType()->getTypeName();
@@ -1293,11 +1312,11 @@ void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
       llvm::Constant* initialVal = llvmLiteralValue(*varDef.getLiteral());
       builder->CreateStore(initialVal, alloca);
       scopeManager->addVar(varDef.getTypedVar()->getId(), alloca,
-                           currentFunction,
+                           currentFunction(),
                            varDef.getTypedVar()->getType()->getTypeName());
     }
   } else {
-    if (currentFunction == nullptr) {
+    if (currentFunction() == nullptr) {
       // global var def
       const std::string typeName =
           varDef.getTypedVar()->getType()->getTypeName();
@@ -1320,7 +1339,7 @@ void LLVMCodeGenVisitor::visitVarDef(const VarDefAST& varDef) {
       llvm::Constant* initialVal = llvmLiteralValue(*varDef.getLiteral());
       builder->CreateStore(initialVal, alloca);
       scopeManager->addVar(varDef.getTypedVar()->getId(), alloca,
-                           currentFunction,
+                           currentFunction(),
                            varDef.getTypedVar()->getType()->getTypeName());
     }
   }
@@ -1568,7 +1587,7 @@ void LLVMCodeGenVisitor::visitStmtFor(const StmtForAST& stmtFor) {
   llvm::Type* llvmLoopVarType = llvmTypeOrClassPtrType(loopVarType);
   llvm::AllocaInst* loopVarAlloca =
       builder->CreateAlloca(llvmLoopVarType, nullptr, loopVar->getId());
-  scopeManager->addVar(loopVar->getId(), loopVarAlloca, currentFunction,
+  scopeManager->addVar(loopVar->getId(), loopVarAlloca, currentFunction(),
                        loopVarType, true);
 
   // Create basic blocks
@@ -1661,7 +1680,7 @@ void LLVMCodeGenVisitor::visitSimpleStmtReturn(
     builder->CreateRet(retValue);
   } else {
     builder->CreateRet(
-        llvmDefaultValue(currentFunction->getReturnType()->getTypeName()));
+        llvmDefaultValue(currentFunction()->getReturnType()->getTypeName()));
   }
 }
 
@@ -1819,9 +1838,37 @@ const ClassAST* LLVMCodeGenVisitor::getClassByName(std::string name) const {
 
 inline llvm::Function*
 LLVMCodeGenVisitor::llvmFunc(const FunctionAST* function) {
-  if (function->isNestedFunc())
+  if (function->isNestedFunc()) {
+    createNestedFuncDecl(function);
     return nestedFuncs.at(function);
+  }
   return functions.at(function);
+}
+
+void LLVMCodeGenVisitor::createNestedFuncDecl(const FunctionAST* nestedFunc) {
+  if (nestedFunc->isNestedFunc()) {
+    llvm::Type* retType =
+        llvmTypeOrClassPtrType(nestedFunc->getReturnType()->getTypeName());
+
+    std::vector<llvm::Type*> argTypes;
+    for (const auto& arg : nestedFunc->getArgs()) {
+      argTypes.push_back(llvmTypeOrClassPtrType(arg->getType()->getTypeName()));
+    }
+
+    std::string funcName = nestedFunc->getId().str();
+    const FunctionAST* parentPtr = nestedFunc->getParentFunc();
+    while (parentPtr) {
+      funcName = parentPtr->getId().str() + "-" + funcName;
+      parentPtr = parentPtr->getParentFunc();
+    }
+
+    llvm::FunctionType* funcType =
+        llvm::FunctionType::get(retType, argTypes, false);
+    llvm::Function* func = llvm::Function::Create(
+        funcType, llvm::Function::ExternalLinkage, funcName, *module);
+
+    nestedFuncs[nestedFunc] = func;
+  }
 }
 
 /***********************************/
