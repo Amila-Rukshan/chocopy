@@ -442,9 +442,14 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       binaryExpr.getLhs()->accept(*this);
       std::string instanceType = binaryExpr.getLhs()->getTypeInfo();
 
-      llvm::Value* instancePtr = builder->CreateLoad(
-          getVTable(instanceType).GetVTStructType()->getPointerTo(),
-          binaryExpr.getLhs()->getCodegenValue(), "current_instance_ptr");
+      llvm::Value* instancePtr = binaryExpr.getLhs()->getCodegenValue();
+
+      // load unless direct constructor call is used
+      if (!llvm::isa<CallExprAST>(binaryExpr.getLhs())) {
+        instancePtr = builder->CreateLoad(
+            getVTable(instanceType).GetVTStructType()->getPointerTo(),
+            binaryExpr.getLhs()->getCodegenValue(), "current_instance_ptr");
+      }
 
       auto funcId = llvm::dyn_cast<IdExprAST>(rhs->getCallee())->getId().str();
       std::string functionName = instanceType + "-" + funcId;
@@ -1122,6 +1127,7 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   }
   llvm::Function* calleeFunc = nullptr;
   bool isConstructorCall = false;
+  bool isNestedFuncCall = false;
   if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
     if (callee->getId() == "print") {
       auto& arg = callExpr.getArgs().front();
@@ -1244,6 +1250,8 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
       }
 
       if (constructorDunderMethod) {
+        // TODO: for nested functions provide the ref_env argument as the first
+        // arg
         std::vector<llvm::Value*> args;
         args.push_back(bitcast);
         for (const auto& arg : callExpr.getArgs()) {
@@ -1262,9 +1270,11 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
       // first check for nested function or a sibling function
       auto currentFn = currentFunction();
       if (currentFn) {
+        // look for child function
         for (auto& innerFunc : currentFn->getFuncDefs()) {
           if (innerFunc->getId().str() == callee->getId()) {
             calleeFunc = nestedFuncs[innerFunc.get()];
+            isNestedFuncCall = true;
           }
         }
       }
@@ -1280,6 +1290,9 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   }
   assert(calleeFunc && "Function could not be found");
   std::vector<llvm::Value*> args;
+  if (isNestedFuncCall) {
+    args.push_back(llvmDefaultValue("object"));
+  }
   for (const auto& arg : callExpr.getArgs()) {
     llvm::Value* argVal = arg->getCodegenValue();
     if (argVal == nullptr) {

@@ -106,6 +106,19 @@ void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
     definedFunctions[currentClass != nullptr ? currentClass->getId().str() +
                                                    "-" + func.getId().str()
                                              : func.getId().str()] = &func;
+  } else {
+    std::string fullyQualifiedName = func.getId().str();
+    const FunctionAST* parentFuncPtr = func.getParentFunc();
+    while (parentFuncPtr != nullptr) {
+      fullyQualifiedName =
+          parentFuncPtr->getId().str() + "-" + fullyQualifiedName;
+      parentFuncPtr = parentFuncPtr->getParentFunc();
+    }
+    if (currentClass) {
+      fullyQualifiedName =
+          currentClass->getId().str() + "-" + fullyQualifiedName;
+    }
+    definedFunctions[fullyQualifiedName] = &func;
   }
 
   for (auto& arg : func.getArgs()) {
@@ -123,7 +136,7 @@ void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
   }
 
   // class methods type checks
-  if (currentClass != nullptr) {
+  if (currentClass != nullptr && !func.isNestedFunc()) {
     if (func.getArgs().empty()) {
       errors.push_back(
           SemanticError(func.loc().line, func.loc().col,
@@ -211,6 +224,30 @@ void SemanticCheckVisitor::visitListLiteralExpr(
                               std::string(maxDepth, ']'));
 }
 
+std::string SemanticCheckVisitor::getFQN(const CallExprAST& callExpr) {
+  if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
+    if (callExpr.getSelfExpr())
+      return callExpr.getSelfExpr()->getTypeInfo() + "-" +
+             callee->getId().str();
+    else {
+      std::string fullyQualifiedName = callee->getId().str();
+      const FunctionAST* parentFunction = currentFunction;
+      while (parentFunction) {
+        if (fullyQualifiedName != parentFunction->getId().str()) {
+          fullyQualifiedName =
+              parentFunction->getId().str() + "-" + fullyQualifiedName;
+        }
+        parentFunction = parentFunction->getParentFunc();
+      }
+      if (currentClass) {
+        fullyQualifiedName =
+            currentClass->getId().str() + "-" + fullyQualifiedName;
+      }
+      return fullyQualifiedName;
+    }
+  }
+}
+
 void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
   for (const auto& arg : callExpr.getArgs()) {
     arg->accept(*this);
@@ -218,12 +255,7 @@ void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
   if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
     if (auto classPtr = definedClasses[callee->getId().str()]) {
       callExpr.setTypeInfo(classPtr->getId().str());
-    } else if (auto funcPtr =
-                   definedFunctions[callExpr.getSelfExpr() != nullptr
-                                        ? callExpr.getSelfExpr()
-                                                  ->getTypeInfo() +
-                                              "-" + callee->getId().str()
-                                        : callee->getId().str()]) {
+    } else if (auto funcPtr = definedFunctions[getFQN(callExpr)]) {
       if (callee->getId().str() == "print" &&
           callExpr.getSelfExpr() == nullptr) {
         if (callExpr.getArgs().empty()) {
@@ -243,8 +275,10 @@ void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
         callExpr.setTypeInfo("None");
         return;
       } else if (funcPtr->getArgs().size() !=
-                 (callExpr.getArgs().size() +
-                  (callExpr.getSelfExpr() ? 1 : 0))) {
+                 (callExpr.getArgs().size() + (callExpr.getSelfExpr() ? 1
+                                               : funcPtr->isNestedFunc()
+                                                   ? 1
+                                                   : 0))) {
         errors.push_back(SemanticError(
             callee->loc().line, callee->loc().col,
             "Function '" + callee->getId().str() + "' expects " +
@@ -252,19 +286,22 @@ void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
                 " arguments, but got " +
                 std::to_string(callExpr.getArgs().size()) + "\n"));
       } else {
-        // Hanlde dispatch call type checking
-        if (callExpr.getSelfExpr()) {
-          if (!isSubTypeOf(callExpr.getSelfExpr()->getTypeInfo(),
-                           funcPtr->getArgs()[0]->getType()->getTypeName())) {
-            errors.push_back(SemanticError(
-                callExpr.getSelfExpr()->loc().line,
-                callExpr.getSelfExpr()->loc().col,
-                "First argument of function '" + callee->getId().str() +
-                    "' must be of type '" +
-                    funcPtr->getArgs()[0]->getType()->getTypeName() +
-                    "', but got '" + callExpr.getSelfExpr()->getTypeInfo() +
-                    "'\n"));
+        // Hanlde dispatch call / nested func call type checking
+        if (callExpr.getSelfExpr() || funcPtr->isNestedFunc()) {
+          if (callExpr.getSelfExpr()) {
+            if (!isSubTypeOf(callExpr.getSelfExpr()->getTypeInfo(),
+                             funcPtr->getArgs()[0]->getType()->getTypeName())) {
+              errors.push_back(SemanticError(
+                  callExpr.getSelfExpr()->loc().line,
+                  callExpr.getSelfExpr()->loc().col,
+                  "First argument of function '" + callee->getId().str() +
+                      "' must be of type '" +
+                      funcPtr->getArgs()[0]->getType()->getTypeName() +
+                      "', but got '" + callExpr.getSelfExpr()->getTypeInfo() +
+                      "'\n"));
+            }
           }
+          // Common args type check
           for (size_t argIndex = 1; argIndex < funcPtr->getArgs().size();
                ++argIndex) {
             auto argType = callExpr.getArgs()[argIndex - 1]->getTypeInfo();

@@ -58,6 +58,7 @@ public:
   void visitStmtIf(const StmtIfAST& stmtIf) override;
   void visitStmtWhile(const StmtWhileAST& stmtWhile) override;
   void visitStmtFor(const StmtForAST& stmtFor) override;
+  std::string getFQN(const CallExprAST& callExpr);
 
   inline std::string typeUnion(const std::string& lhsType,
                                const std::string& rhsType);
