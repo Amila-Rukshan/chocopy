@@ -87,7 +87,11 @@ private:
   llvm::Constant* llvmLiteralValue(const LiteralAST& literal);
   llvm::Function* llvmFunc(const FunctionAST* function);
   void createNestedFuncDecl(const FunctionAST* nestedFunc);
+  void createReferenceEnvType(const FunctionAST* nestedFunc);
   llvm::Value* lookupVariable(llvm::StringRef varName);
+  std::string getFQN(const FunctionAST* func);
+  std::tuple<int, int> calculateClosureDimensions(const FunctionAST* nestedFunc,
+                                                  const std::string& varName);
 
   std::unique_ptr<llvm::LLVMContext> context;
   std::unique_ptr<llvm::IRBuilder<>> builder;
@@ -109,6 +113,10 @@ private:
   std::unique_ptr<ScopeManager> scopeManager;
 
   std::unordered_map<const FunctionAST*, llvm::Function*> nestedFuncs;
+  std::unordered_map<const FunctionAST*, std::string> globalDeclns;
+  std::unordered_map<const FunctionAST*, std::string> nonlocalDeclns;
+  std::unordered_map<const FunctionAST*, llvm::StructType*>
+      nestedFuncToRefEnvType;
 
   llvm::Constant* getOrCreateGlobalFmtStr(const std::string& str,
                                           const std::string& name);

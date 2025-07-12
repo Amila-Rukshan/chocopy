@@ -279,12 +279,21 @@ void LLVMCodeGenVisitor::visitFunction(const FunctionAST& func) {
     builder->CreateStore(&param, alloca);
   }
 
+  for (auto& nonlocalVar : func.getNonlocalDecls()) {
+    nonlocalDeclns[&func] = nonlocalVar;
+  }
+
+  for (auto& globalVar : func.getGlobalDecls()) {
+    globalDeclns[&func] = globalVar;
+  }
+
   for (auto& localVar : func.getVarDefs()) {
     localVar->accept(*this);
   }
 
   for (auto& nestedFunc : func.getFuncDefs()) {
     functionStack.push(nestedFunc.get());
+    createReferenceEnvType(nestedFunc.get());
     nestedFunc->accept(*this);
     functionStack.pop();
   }
@@ -1031,7 +1040,98 @@ void LLVMCodeGenVisitor::visitIfElseExpr(const IfElseExprAST& ifElseExpr) {
   ifElseExpr.setCodegenValue(phi);
 }
 
+std::tuple<int, int>
+LLVMCodeGenVisitor::calculateClosureDimensions(const FunctionAST* nestedFunc,
+                                               const std::string& varName) {
+  int staticChainDerefCount = 0;
+  int closureGEPDistance = 0;
+
+  const FunctionAST* parentFunc = nestedFunc->getParentFunc();
+  while (parentFunc) {
+
+    for (auto& arg : parentFunc->getArgs()) {
+      closureGEPDistance++;
+      if (arg->getId().str() == varName) {
+        return std::make_tuple(staticChainDerefCount, closureGEPDistance);
+      }
+    }
+
+    for (auto& varDef : parentFunc->getVarDefs()) {
+      closureGEPDistance++;
+      if (varDef->getTypedVar()->getId().str() == varName) {
+        return std::make_tuple(staticChainDerefCount, closureGEPDistance);
+      }
+    }
+    staticChainDerefCount++;
+  }
+
+  throw std::runtime_error("Closure variable '" + varName +
+                           "' could not be found for '" +
+                           nestedFunc->getId().str() + "'.");
+}
+
 void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
+  // Check whether this is a global var declaration resolution
+  auto currentFn = currentFunction();
+  if (currentFn) {
+    auto found = globalDeclns.find(currentFn);
+    if (found != globalDeclns.end()) {
+      if (found->second == idExpr.getId().str()) {
+        llvm::GlobalVariable* globalVar = globalVariables[idExpr.getId().str()];
+        if (globalVar == nullptr) {
+          llvm::errs() << "Unknown global variable: " << idExpr.getId() << "\n";
+          return;
+        }
+        llvm::Type* varType = globalVar->getValueType();
+        if (isPrimitiveType(globalVariableTypes[idExpr.getId()])) {
+          llvm::Value* globalVarVal =
+              builder->CreateLoad(varType, globalVar, "global_var_val");
+          idExpr.setCodegenValue(globalVarVal);
+        } else {
+          idExpr.setCodegenValue(globalVar);
+        }
+        return;
+      }
+    }
+
+    if (currentFn->isNestedFunc()) {
+      // check for nonlocal declarations
+      const VarInfor* varInfo = scopeManager->lookupVar(idExpr.getId());
+      if (varInfo) {
+        const auto& [localVar, varDeclaredFn, type, isIterVar] = *varInfo;
+        if (varDeclaredFn != currentFn) {
+          // lookup the var using ref_env arg
+          const VarInfor* refEnvVarInfo = scopeManager->lookupVar("ref_env");
+          if (refEnvVarInfo && refEnvVarInfo->funcPtr == currentFn) {
+            auto [staticChainDerefCount, varGEPDistance] =
+                calculateClosureDimensions(currentFn, idExpr.getId().str());
+            auto refEnvStructType = nestedFuncToRefEnvType[currentFn];
+            // load the ref env address
+            llvm::Value* refEnvVarAddress = builder->CreateLoad(
+                refEnvStructType->getPointerTo(), refEnvVarInfo->var);
+            // create GEP for the var in ref env
+            llvm::Value* refEnvVarGEP =
+                builder->CreateStructGEP(refEnvStructType, refEnvVarAddress,
+                                         varGEPDistance, "ref_env_var_gep");
+            // load var address
+            llvm::Value* varLocationLoaded = builder->CreateLoad(
+                refEnvStructType->getElementType(varGEPDistance), refEnvVarGEP);
+            // load var conditions
+            if (isPrimitiveType(type) || (isIterVar && !llvmClass(type))) {
+              llvm::Value* loadedRefEnvVal =
+                  builder->CreateLoad(llvmTypeOrClassPtrType(type),
+                                      varLocationLoaded, "ref_env_loaded_var");
+              idExpr.setCodegenValue(loadedRefEnvVal);
+            } else {
+              idExpr.setCodegenValue(varLocationLoaded);
+            }
+            return;
+          }
+        }
+      }
+    }
+  }
+
   if (currentClass == nullptr && currentFunction() == nullptr) {
     const VarInfor* varInfo = scopeManager->lookupVar(idExpr.getId());
     if (varInfo) {
@@ -1128,6 +1228,7 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   llvm::Function* calleeFunc = nullptr;
   bool isConstructorCall = false;
   bool isNestedFuncCall = false;
+  const FunctionAST* resolvedNestedFunc = nullptr;
   if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
     if (callee->getId() == "print") {
       auto& arg = callExpr.getArgs().front();
@@ -1250,8 +1351,6 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
       }
 
       if (constructorDunderMethod) {
-        // TODO: for nested functions provide the ref_env argument as the first
-        // arg
         std::vector<llvm::Value*> args;
         args.push_back(bitcast);
         for (const auto& arg : callExpr.getArgs()) {
@@ -1275,6 +1374,7 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
           if (innerFunc->getId().str() == callee->getId()) {
             calleeFunc = nestedFuncs[innerFunc.get()];
             isNestedFuncCall = true;
+            resolvedNestedFunc = innerFunc.get();
           }
         }
       }
@@ -1291,7 +1391,53 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   assert(calleeFunc && "Function could not be found");
   std::vector<llvm::Value*> args;
   if (isNestedFuncCall) {
-    args.push_back(llvmDefaultValue("object"));
+    // get ref env struct type
+    llvm::StructType* refEnvType = nestedFuncToRefEnvType[resolvedNestedFunc];
+    size_t refEnvStructSize =
+        module->getDataLayout().getTypeAllocSize(refEnvType);
+    llvm::Value* mallocSize =
+        llvm::ConstantInt::get(*context, llvm::APInt(32, refEnvStructSize));
+    llvm::Value* mallocCall = builder->CreateCall(
+        module->getFunction("malloc"), mallocSize, "ref_env_malloc_call");
+
+    llvm::Value* refEnvBitcast = builder->CreateBitCast(
+        mallocCall, refEnvType->getPointerTo(), "ref_env_bitcast");
+
+    // TODO: just store nullptr for now, this should be the static link for
+    // nested closures
+    llvm::Value* parentRefEnvPtr = llvmDefaultValue("object");
+    builder->CreateStore(parentRefEnvPtr, refEnvBitcast);
+
+    const FunctionAST* parentFunc = resolvedNestedFunc->getParentFunc();
+    int counterGEP = 1; // assuming index 0 is for static chain
+
+    // store arg locations
+    for (auto& arg : parentFunc->getArgs()) {
+      const VarInfor* varInfo = scopeManager->lookupVar(arg->getId().str());
+      if (varInfo) {
+        const auto& [localVar, _, type, isIterVar] = *varInfo;
+        llvm::Value* localVarPtrInClosure =
+            builder->CreateStructGEP(refEnvType, refEnvBitcast, counterGEP);
+        builder->CreateStore(localVar, localVarPtrInClosure);
+      }
+      counterGEP++;
+    }
+
+    // store var locations
+    for (auto& varDef : parentFunc->getVarDefs()) {
+      const VarInfor* varInfo =
+          scopeManager->lookupVar(varDef->getTypedVar()->getId());
+      if (varInfo) {
+        const auto& [localVar, _, type, isIterVar] = *varInfo;
+        llvm::Value* localVarPtr = builder->CreateStructGEP(
+            refEnvType, refEnvBitcast, counterGEP, "ref_env_var_gep");
+        builder->CreateStore(localVar, localVarPtr);
+      }
+      counterGEP++;
+    }
+
+    // reference env link is the first argumet to the nested function call
+    args.push_back(refEnvBitcast);
   }
   for (const auto& arg : callExpr.getArgs()) {
     llvm::Value* argVal = arg->getCodegenValue();
@@ -1390,7 +1536,52 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
   }
   for (const auto& varTarget : simpleStmtAssign.getTargets()) {
     if (auto idExpr = llvm::dyn_cast<IdExprAST>(varTarget.get())) {
-      llvm::Value* var = lookupVariable(idExpr->getId());
+      llvm::Value* var = nullptr;
+      auto currentFn = currentFunction();
+      auto found = globalDeclns.find(currentFunction());
+      if (found != globalDeclns.end()) {
+        if (found->second == idExpr->getId().str()) {
+          var = globalVariables[idExpr->getId().str()];
+        }
+      } else {
+        bool varFoundInClosure = false;
+        if (currentFn && currentFn->isNestedFunc()) {
+          // check for nonlocal declarations
+          const VarInfor* varInfo = scopeManager->lookupVar(idExpr->getId());
+          if (varInfo) {
+            const auto& [localVar, varDeclaredFn, type, isIterVar] = *varInfo;
+            if (varDeclaredFn != currentFn) {
+              // lookup the var using ref_env arg
+              const VarInfor* refEnvVarInfo =
+                  scopeManager->lookupVar("ref_env");
+              if (refEnvVarInfo && refEnvVarInfo->funcPtr == currentFn) {
+                auto [staticChainDerefCount, varGEPDistance] =
+                    calculateClosureDimensions(currentFn,
+                                               idExpr->getId().str());
+                auto refEnvStructType = nestedFuncToRefEnvType[currentFn];
+                // load the ref env address
+                llvm::Value* refEnvVarAddress = builder->CreateLoad(
+                    refEnvStructType->getPointerTo(), refEnvVarInfo->var);
+                // create GEP for the var in ref env
+                llvm::Value* refEnvVarGEP =
+                    builder->CreateStructGEP(refEnvStructType, refEnvVarAddress,
+                                             varGEPDistance, "ref_env_var_gep");
+                // load var address
+                llvm::Value* varLocationLoaded = builder->CreateLoad(
+                    refEnvStructType->getElementType(varGEPDistance),
+                    refEnvVarGEP);
+                // set closure var location
+                var = varLocationLoaded;
+                // mark as var found
+                varFoundInClosure = true;
+              }
+            }
+          }
+        }
+        if (!varFoundInClosure) {
+          var = lookupVariable(idExpr->getId());
+        }
+      }
       builder->CreateStore(rhsValue, var);
     } else if (auto binaryExpr =
                    llvm::dyn_cast<BinaryExprAST>(varTarget.get())) {
@@ -1856,6 +2047,45 @@ LLVMCodeGenVisitor::llvmFunc(const FunctionAST* function) {
     return nestedFuncs.at(function);
   }
   return functions.at(function);
+}
+
+std::string LLVMCodeGenVisitor::getFQN(const FunctionAST* func) {
+  std::string fullyQualifiedName = func->getId().str();
+  const FunctionAST* parentFunction = currentFunction();
+  while (parentFunction) {
+    if (fullyQualifiedName != parentFunction->getId().str()) {
+      fullyQualifiedName =
+          parentFunction->getId().str() + "-" + fullyQualifiedName;
+    }
+    parentFunction = parentFunction->getParentFunc();
+  }
+  if (currentClass) {
+    fullyQualifiedName = currentClass->getId().str() + "-" + fullyQualifiedName;
+  }
+  return fullyQualifiedName;
+}
+
+void LLVMCodeGenVisitor::createReferenceEnvType(const FunctionAST* nestedFunc) {
+  // Get parent function create a reference env type using all of it's args and
+  // local variables
+  const FunctionAST* parentFunction = nestedFunc->getParentFunc();
+  llvm::StructType* refEnvStructType =
+      llvm::StructType::create(*context, getFQN(nestedFunc));
+
+  std::vector<llvm::Type*> fieldTypes = {llvm::Type::getInt8PtrTy(*context)};
+
+  for (auto& arg : parentFunction->getArgs()) {
+    fieldTypes.push_back(llvm::PointerType::getUnqual(
+        llvmTypeOrClassPtrType(arg->getTypeInfo())));
+  }
+
+  for (auto& varDef : parentFunction->getVarDefs()) {
+    fieldTypes.push_back(llvm::PointerType::getUnqual(llvmTypeOrClassPtrType(
+        varDef->getTypedVar()->getType()->getTypeName())));
+  }
+
+  refEnvStructType->setBody(fieldTypes);
+  nestedFuncToRefEnvType[nestedFunc] = refEnvStructType;
 }
 
 void LLVMCodeGenVisitor::createNestedFuncDecl(const FunctionAST* nestedFunc) {
