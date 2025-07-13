@@ -2,6 +2,7 @@
 #define CHOCOPY_SEMANTIC_H
 
 #include <algorithm>
+#include <stack>
 
 #include "AST.h"
 #include "Utils.h"
@@ -58,45 +59,18 @@ public:
   void visitStmtIf(const StmtIfAST& stmtIf) override;
   void visitStmtWhile(const StmtWhileAST& stmtWhile) override;
   void visitStmtFor(const StmtForAST& stmtFor) override;
+
+private:
   std::string getFQN(const CallExprAST& callExpr);
+
+  inline bool isSubTypeOf(const std::string& subType,
+                          const std::string& superType);
 
   inline std::string typeUnion(const std::string& lhsType,
                                const std::string& rhsType);
 
-  inline bool isSubTypeOf(const std::string& subType,
-                          const std::string& superType) {
-    auto subPos = subType.find('[');
-    auto superPos = superType.find('[');
-    if (subPos == std::string::npos ^ superPos == std::string::npos)
-      return false;
-    if (subPos != std::string::npos && superPos != std::string::npos) {
-      int dimSub = std::count(subType.begin(), subType.end(), '[');
-      int dimSuper = std::count(superType.begin(), superType.end(), '[');
-      if (dimSub != dimSuper)
-        return false;
-      auto subTypeBase = subType.substr(0, subPos);
-      auto superTypeBase = superType.substr(0, superPos);
-      if (subTypeBase == "<Empty>") {
-        return true;
-      }
-      return isSubTypeOf(subTypeBase, superTypeBase);
-    }
+  const FunctionAST* currentFunction() const;
 
-    if (subType == superType || subType == "<None>")
-      return true;
-
-    ClassAST* subClass = definedClasses[subType];
-    ClassAST* superClass = definedClasses[superType];
-
-    while (subClass && subClass->getId() != "object") {
-      if (subClass->getId() == superClass->getId())
-        return true;
-      subClass = const_cast<ClassAST*>(subClass->getParentClass());
-    }
-    return false;
-  }
-
-private:
   bool isDefinedType(const llvm::StringRef typeName) {
     return std::find(definedClassIds.begin(), definedClassIds.end(),
                      typeName) != definedClassIds.end();
@@ -110,7 +84,7 @@ private:
   std::unordered_map<std::string, std::string> localVarToType;
 
   ClassAST* currentClass = nullptr;
-  FunctionAST* currentFunction = nullptr;
+  std::stack<const FunctionAST*> functionStack;
 };
 
 inline const VarDefAST* lookupAttributeInHierarchy(const ClassAST* clazz,

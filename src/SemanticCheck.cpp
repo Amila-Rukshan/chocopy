@@ -84,9 +84,9 @@ void SemanticCheckVisitor::visitProgram(const ProgramAST& program) {
     varDef->accept(*this);
   }
   for (auto& globFunc : program.getFuncDefs()) {
-    currentFunction = globFunc.get();
+    functionStack.push(globFunc.get());
     globFunc->accept(*this);
-    currentFunction = nullptr;
+    functionStack.pop();
   }
   for (auto& stmt : program.getStmts()) {
     stmt->accept(*this);
@@ -95,9 +95,9 @@ void SemanticCheckVisitor::visitProgram(const ProgramAST& program) {
 
 void SemanticCheckVisitor::visitClass(const ClassAST& clazz) {
   for (auto& method : clazz.getMethodDefs()) {
-    currentFunction = method.get();
+    functionStack.push(method.get());
     method->accept(*this);
-    currentFunction = nullptr;
+    functionStack.pop();
   }
 }
 
@@ -132,7 +132,9 @@ void SemanticCheckVisitor::visitFunction(const FunctionAST& func) {
   }
 
   for (auto& nestedFunc : func.getFuncDefs()) {
+    functionStack.push(nestedFunc.get());
     nestedFunc->accept(*this);
+    functionStack.pop();
   }
 
   // class methods type checks
@@ -231,7 +233,7 @@ std::string SemanticCheckVisitor::getFQN(const CallExprAST& callExpr) {
              callee->getId().str();
     else {
       std::string fullyQualifiedName = callee->getId().str();
-      const FunctionAST* parentFunction = currentFunction;
+      const FunctionAST* parentFunction = currentFunction();
       while (parentFunction) {
         if (fullyQualifiedName != parentFunction->getId().str()) {
           fullyQualifiedName =
@@ -343,14 +345,14 @@ void SemanticCheckVisitor::visitCallExpr(const CallExprAST& callExpr) {
 }
 
 void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
-  if (currentClass == nullptr && currentFunction == nullptr) {
+  if (currentClass == nullptr && currentFunction() == nullptr) {
     if (localVarToType.find(idExpr.getId().str()) != localVarToType.end()) {
       idExpr.setTypeInfo(localVarToType.at(idExpr.getId().str()));
     } else if (globalVarToType.find(idExpr.getId().str()) !=
                globalVarToType.end()) {
       idExpr.setTypeInfo(globalVarToType.at(idExpr.getId().str()));
     }
-  } else if (currentClass != nullptr && currentFunction != nullptr) {
+  } else if (currentClass != nullptr && currentFunction() != nullptr) {
     if (idExpr.getId() == "self") {
       idExpr.setTypeInfo(currentClass->getId().str());
     } else if (localVarToType.find(idExpr.getId().str()) !=
@@ -360,7 +362,7 @@ void SemanticCheckVisitor::visitIdExpr(const IdExprAST& idExpr) {
                globalVarToType.end()) {
       idExpr.setTypeInfo(globalVarToType.at(idExpr.getId().str()));
     }
-  } else if (currentClass == nullptr && currentFunction != nullptr) {
+  } else if (currentClass == nullptr && currentFunction() != nullptr) {
     if (localVarToType.find(idExpr.getId().str()) != localVarToType.end()) {
       auto tt = localVarToType.at(idExpr.getId().str());
       idExpr.setTypeInfo(localVarToType.at(idExpr.getId().str()));
@@ -736,7 +738,7 @@ void SemanticCheckVisitor::visitVarDef(const VarDefAST& varDef) {
               "' must be initialized with 'None' literal\n"));
     }
   }
-  if (currentClass == nullptr && currentFunction == nullptr) {
+  if (currentClass == nullptr && currentFunction() == nullptr) {
     globalVarToType[varDef.getTypedVar()->getId().str()] =
         varDef.getTypedVar()->getTypeInfo();
   }
@@ -864,8 +866,8 @@ void SemanticCheckVisitor::visitSimpleStmtReturn(
   auto retType = simpleStmtReturn.getExpr()
                      ? simpleStmtReturn.getExpr()->getTypeInfo()
                      : "<None>";
-  auto funcReturnType = currentFunction
-                            ? currentFunction->getReturnType()->getTypeName()
+  auto funcReturnType = currentFunction()
+                            ? currentFunction()->getReturnType()->getTypeName()
                             : "<None>";
   if (isPrimitiveType(funcReturnType) && isPrimitiveType(retType) &&
       funcReturnType != retType) {
@@ -879,6 +881,43 @@ void SemanticCheckVisitor::visitSimpleStmtReturn(
                       "Return type mismatch: expected '" + funcReturnType +
                           "', found '" + retType + "'\n"));
   }
+}
+
+bool SemanticCheckVisitor::isSubTypeOf(const std::string& subType,
+                                       const std::string& superType) {
+  auto subPos = subType.find('[');
+  auto superPos = superType.find('[');
+  if (subPos == std::string::npos ^ superPos == std::string::npos)
+    return false;
+  if (subPos != std::string::npos && superPos != std::string::npos) {
+    int dimSub = std::count(subType.begin(), subType.end(), '[');
+    int dimSuper = std::count(superType.begin(), superType.end(), '[');
+    if (dimSub != dimSuper)
+      return false;
+    auto subTypeBase = subType.substr(0, subPos);
+    auto superTypeBase = superType.substr(0, superPos);
+    if (subTypeBase == "<Empty>") {
+      return true;
+    }
+    return isSubTypeOf(subTypeBase, superTypeBase);
+  }
+
+  if (subType == superType || subType == "<None>")
+    return true;
+
+  ClassAST* subClass = definedClasses[subType];
+  ClassAST* superClass = definedClasses[superType];
+
+  while (subClass && subClass->getId() != "object") {
+    if (subClass->getId() == superClass->getId())
+      return true;
+    subClass = const_cast<ClassAST*>(subClass->getParentClass());
+  }
+  return false;
+}
+
+const FunctionAST* SemanticCheckVisitor::currentFunction() const {
+  return functionStack.empty() ? nullptr : functionStack.top();
 }
 
 } // namespace chocopy

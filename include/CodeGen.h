@@ -97,11 +97,11 @@ private:
   std::unique_ptr<llvm::IRBuilder<>> builder;
   std::unique_ptr<llvm::Module> module;
 
-  FunctionAST* currentFunction();
+  const FunctionAST* currentFunction() const;
 
   ProgramAST* programAST = nullptr;
   ClassAST* currentClass = nullptr;
-  std::stack<FunctionAST*> functionStack;
+  std::stack<const FunctionAST*> functionStack;
   llvm::StringRef programPath;
 
   std::unordered_map<const ClassAST*, llvm::StructType*> classToStructType;

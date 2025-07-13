@@ -15,7 +15,7 @@ LLVMCodeGenVisitor::LLVMCodeGenVisitor(ProgramAST* program,
 
 LLVMCodeGenVisitor::~LLVMCodeGenVisitor() {}
 
-FunctionAST* LLVMCodeGenVisitor::currentFunction() {
+const FunctionAST* LLVMCodeGenVisitor::currentFunction() const {
   return functionStack.empty() ? nullptr : functionStack.top();
 }
 
@@ -1063,6 +1063,8 @@ LLVMCodeGenVisitor::calculateClosureDimensions(const FunctionAST* nestedFunc,
       }
     }
     staticChainDerefCount++;
+    parentFunc = parentFunc->getParentFunc();
+    closureGEPDistance = 0;
   }
 
   throw std::runtime_error("Closure variable '" + varName +
@@ -1098,17 +1100,33 @@ void LLVMCodeGenVisitor::visitIdExpr(const IdExprAST& idExpr) {
       // check for nonlocal declarations
       const VarInfor* varInfo = scopeManager->lookupVar(idExpr.getId());
       if (varInfo) {
-        const auto& [localVar, varDeclaredFn, type, isIterVar] = *varInfo;
+        const auto& [_, varDeclaredFn, type, isIterVar] = *varInfo;
         if (varDeclaredFn != currentFn) {
           // lookup the var using ref_env arg
+          auto [staticChainDerefCount, varGEPDistance] =
+              calculateClosureDimensions(currentFn, idExpr.getId().str());
           const VarInfor* refEnvVarInfo = scopeManager->lookupVar("ref_env");
           if (refEnvVarInfo && refEnvVarInfo->funcPtr == currentFn) {
-            auto [staticChainDerefCount, varGEPDistance] =
-                calculateClosureDimensions(currentFn, idExpr.getId().str());
-            auto refEnvStructType = nestedFuncToRefEnvType[currentFn];
-            // load the ref env address
+            // find the actual function with the closure (when deeply nested
+            // (more than one level) function accessing a var)
+            const FunctionAST* clouseFunc = currentFn;
+            // load the first ref_env (closure)
             llvm::Value* refEnvVarAddress = builder->CreateLoad(
-                refEnvStructType->getPointerTo(), refEnvVarInfo->var);
+                nestedFuncToRefEnvType[clouseFunc]->getPointerTo(),
+                refEnvVarInfo->var);
+            // static chain dereference
+            while (staticChainDerefCount > 0) {
+              auto parentRefEnvType = nestedFuncToRefEnvType[clouseFunc];
+              // ref_env is assumed to store its parent at index 0
+              refEnvVarAddress = builder->CreateStructGEP(
+                  parentRefEnvType, refEnvVarAddress, 0, "static_chain_gep");
+              refEnvVarAddress = builder->CreateLoad(
+                  parentRefEnvType->getPointerTo(), refEnvVarAddress);
+              clouseFunc = clouseFunc->getParentFunc();
+              staticChainDerefCount--;
+            }
+            // find the closure type
+            auto refEnvStructType = nestedFuncToRefEnvType[clouseFunc];
             // create GEP for the var in ref env
             llvm::Value* refEnvVarGEP =
                 builder->CreateStructGEP(refEnvStructType, refEnvVarAddress,
@@ -1228,6 +1246,7 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   llvm::Function* calleeFunc = nullptr;
   bool isConstructorCall = false;
   bool isNestedFuncCall = false;
+  bool isNestedFuncRecursiveCall = false;
   const FunctionAST* resolvedNestedFunc = nullptr;
   if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
     if (callee->getId() == "print") {
@@ -1366,15 +1385,22 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
 
       callExpr.setCodegenValue(bitcast);
     } else {
-      // first check for nested function or a sibling function
+      // first check for nested function
       auto currentFn = currentFunction();
       if (currentFn) {
-        // look for child function
-        for (auto& innerFunc : currentFn->getFuncDefs()) {
-          if (innerFunc->getId().str() == callee->getId()) {
-            calleeFunc = nestedFuncs[innerFunc.get()];
-            isNestedFuncCall = true;
-            resolvedNestedFunc = innerFunc.get();
+        if (currentFn->getId().str() == callee->getId()) {
+          calleeFunc = const_cast<llvm::Function*>(nestedFuncs[currentFn]);
+          resolvedNestedFunc = currentFn;
+          isNestedFuncCall = true;
+          isNestedFuncRecursiveCall = true;
+        } else {
+          // look for child function
+          for (auto& innerFunc : currentFn->getFuncDefs()) {
+            if (innerFunc->getId().str() == callee->getId()) {
+              calleeFunc = nestedFuncs[innerFunc.get()];
+              isNestedFuncCall = true;
+              resolvedNestedFunc = innerFunc.get();
+            }
           }
         }
       }
@@ -1391,53 +1417,75 @@ void LLVMCodeGenVisitor::visitCallExpr(const CallExprAST& callExpr) {
   assert(calleeFunc && "Function could not be found");
   std::vector<llvm::Value*> args;
   if (isNestedFuncCall) {
-    // get ref env struct type
-    llvm::StructType* refEnvType = nestedFuncToRefEnvType[resolvedNestedFunc];
-    size_t refEnvStructSize =
-        module->getDataLayout().getTypeAllocSize(refEnvType);
-    llvm::Value* mallocSize =
-        llvm::ConstantInt::get(*context, llvm::APInt(32, refEnvStructSize));
-    llvm::Value* mallocCall = builder->CreateCall(
-        module->getFunction("malloc"), mallocSize, "ref_env_malloc_call");
-
-    llvm::Value* refEnvBitcast = builder->CreateBitCast(
-        mallocCall, refEnvType->getPointerTo(), "ref_env_bitcast");
-
-    // TODO: just store nullptr for now, this should be the static link for
-    // nested closures
-    llvm::Value* parentRefEnvPtr = llvmDefaultValue("object");
-    builder->CreateStore(parentRefEnvPtr, refEnvBitcast);
-
-    const FunctionAST* parentFunc = resolvedNestedFunc->getParentFunc();
-    int counterGEP = 1; // assuming index 0 is for static chain
-
-    // store arg locations
-    for (auto& arg : parentFunc->getArgs()) {
-      const VarInfor* varInfo = scopeManager->lookupVar(arg->getId().str());
-      if (varInfo) {
-        const auto& [localVar, _, type, isIterVar] = *varInfo;
-        llvm::Value* localVarPtrInClosure =
-            builder->CreateStructGEP(refEnvType, refEnvBitcast, counterGEP);
-        builder->CreateStore(localVar, localVarPtrInClosure);
+    if (isNestedFuncRecursiveCall) {
+      // Pass the ref_env arg (first hidden arg) again as the ref_env to the
+      // recursive call
+      const VarInfor* refEnvVarInfo = scopeManager->lookupVar("ref_env");
+      if (refEnvVarInfo) {
+        llvm::StructType* refEnvType =
+            nestedFuncToRefEnvType[resolvedNestedFunc];
+        llvm::Value* refEnvPtrValue = builder->CreateLoad(
+            refEnvType->getPointerTo(), refEnvVarInfo->var, "ref_env_loaded");
+        args.push_back(refEnvPtrValue);
       }
-      counterGEP++;
-    }
+    } else {
+      // get ref env struct type
+      llvm::StructType* refEnvType = nestedFuncToRefEnvType[resolvedNestedFunc];
+      size_t refEnvStructSize =
+          module->getDataLayout().getTypeAllocSize(refEnvType);
+      llvm::Value* mallocSize =
+          llvm::ConstantInt::get(*context, llvm::APInt(32, refEnvStructSize));
+      llvm::Value* mallocCall = builder->CreateCall(
+          module->getFunction("malloc"), mallocSize, "ref_env_malloc_call");
 
-    // store var locations
-    for (auto& varDef : parentFunc->getVarDefs()) {
-      const VarInfor* varInfo =
-          scopeManager->lookupVar(varDef->getTypedVar()->getId());
-      if (varInfo) {
-        const auto& [localVar, _, type, isIterVar] = *varInfo;
-        llvm::Value* localVarPtr = builder->CreateStructGEP(
-            refEnvType, refEnvBitcast, counterGEP, "ref_env_var_gep");
-        builder->CreateStore(localVar, localVarPtr);
+      llvm::Value* refEnvBitcast = builder->CreateBitCast(
+          mallocCall, refEnvType->getPointerTo(), "ref_env_bitcast");
+
+      // TODO: just store nullptr for now, this should be the static link for
+      // nested closures
+      llvm::Value* parentRefEnvPtr = llvmDefaultValue("object");
+      if (currentFunction()->isNestedFunc()) {
+        const VarInfor* refEnvVarInfo = scopeManager->lookupVar("ref_env");
+        if (refEnvVarInfo) {
+          llvm::StructType* refEnvType =
+              nestedFuncToRefEnvType[resolvedNestedFunc];
+          parentRefEnvPtr = builder->CreateLoad(
+              refEnvType->getPointerTo(), refEnvVarInfo->var, "ref_env_loaded");
+        }
       }
-      counterGEP++;
-    }
+      builder->CreateStore(parentRefEnvPtr, refEnvBitcast);
 
-    // reference env link is the first argumet to the nested function call
-    args.push_back(refEnvBitcast);
+      const FunctionAST* parentFunc = resolvedNestedFunc->getParentFunc();
+      int counterGEP = 1; // assuming index 0 is for static chain
+
+      // store arg locations
+      for (auto& arg : parentFunc->getArgs()) {
+        const VarInfor* varInfo = scopeManager->lookupVar(arg->getId().str());
+        if (varInfo) {
+          const auto& [localVar, _, type, isIterVar] = *varInfo;
+          llvm::Value* localVarPtrInClosure =
+              builder->CreateStructGEP(refEnvType, refEnvBitcast, counterGEP);
+          builder->CreateStore(localVar, localVarPtrInClosure);
+        }
+        counterGEP++;
+      }
+
+      // store var locations
+      for (auto& varDef : parentFunc->getVarDefs()) {
+        const VarInfor* varInfo =
+            scopeManager->lookupVar(varDef->getTypedVar()->getId());
+        if (varInfo) {
+          const auto& [localVar, _, type, isIterVar] = *varInfo;
+          llvm::Value* localVarPtr = builder->CreateStructGEP(
+              refEnvType, refEnvBitcast, counterGEP, "ref_env_var_gep");
+          builder->CreateStore(localVar, localVarPtr);
+        }
+        counterGEP++;
+      }
+
+      // reference env link is the first argumet to the nested function call
+      args.push_back(refEnvBitcast);
+    }
   }
   for (const auto& arg : callExpr.getArgs()) {
     llvm::Value* argVal = arg->getCodegenValue();
@@ -1537,13 +1585,16 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
   for (const auto& varTarget : simpleStmtAssign.getTargets()) {
     if (auto idExpr = llvm::dyn_cast<IdExprAST>(varTarget.get())) {
       llvm::Value* var = nullptr;
+      bool globalVarDeclFound = false;
       auto currentFn = currentFunction();
       auto found = globalDeclns.find(currentFunction());
       if (found != globalDeclns.end()) {
         if (found->second == idExpr->getId().str()) {
           var = globalVariables[idExpr->getId().str()];
+          globalVarDeclFound = true;
         }
-      } else {
+      }
+      if (!globalVarDeclFound) {
         bool varFoundInClosure = false;
         if (currentFn && currentFn->isNestedFunc()) {
           // check for nonlocal declarations
