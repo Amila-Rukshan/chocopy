@@ -82,7 +82,8 @@ TEST(CodeGenTest, MultiplePrograms) {
       {"32", "foo called\ninner\nbar-inner\ndefault\nouter\n"},
       {"33", "45\n"},
       {"34", "12\n5\nFalse\n17\n"},
-      {"35", "1024\n27\n2\n"}};
+      {"35", "1024\n27\n2\n"},
+      {"36", "500\n"}};
 
   for (int i = 0; i < expectedOutput.size(); ++i) {
     std::ostringstream oss;

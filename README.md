@@ -19,11 +19,12 @@ A Dev container is setup for linux OS with the llvm dependancies. Just open the 
 - [x] Lexing
 - [x] Parsing
 - [x] Classes, methods and attributes (with default values)
-- [x] \_\_init\_\_ method (aka class constructor) to initilize attributes
+- [x] `\_\_init\_\_` method (aka class constructor) to initilize attributes
 - [x] Method calling with dynamic dispatch
 - [x] Builtin 'print' function
 - [x] Builtin 'str' type
 - [ ] Complete type checking
-- [x] Control flows - if else and while
+- [x] Control flows - `if-elif-else`, `while` and `for`
 - [x] Binary and unary oprations for int, bool and str types
-
+- [x] List data type support
+- [x] Nested functions with closures

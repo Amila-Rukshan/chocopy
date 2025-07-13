@@ -1609,21 +1609,32 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
                 auto [staticChainDerefCount, varGEPDistance] =
                     calculateClosureDimensions(currentFn,
                                                idExpr->getId().str());
-                auto refEnvStructType = nestedFuncToRefEnvType[currentFn];
-                // load the ref env address
-                llvm::Value* refEnvVarAddress = builder->CreateLoad(
-                    refEnvStructType->getPointerTo(), refEnvVarInfo->var);
-                // create GEP for the var in ref env
-                llvm::Value* refEnvVarGEP =
-                    builder->CreateStructGEP(refEnvStructType, refEnvVarAddress,
+                // load the ref_env address passed to the function
+                const FunctionAST* closureFunc = currentFn;
+                llvm::Value* refEnvPtr = builder->CreateLoad(
+                    nestedFuncToRefEnvType[closureFunc]->getPointerTo(),
+                    refEnvVarInfo->var);
+                // walk up the static chain
+                while (staticChainDerefCount-- > 0) {
+                  auto currentRefEnvType = nestedFuncToRefEnvType[closureFunc];
+                  // GEP to static parent pointer (assumed index 0)
+                  llvm::Value* staticChainGEP = builder->CreateStructGEP(
+                      currentRefEnvType, refEnvPtr, 0, "static_chain_gep");
+                  // load the parent environment pointer
+                  refEnvPtr = builder->CreateLoad(
+                      currentRefEnvType->getElementType(0)->getPointerTo(),
+                      staticChainGEP);
+                  closureFunc = closureFunc->getParentFunc();
+                }
+                // now access the correct slot in the final environment
+                auto finalRefEnvType = nestedFuncToRefEnvType[closureFunc];
+                llvm::Value* varGEP =
+                    builder->CreateStructGEP(finalRefEnvType, refEnvPtr,
                                              varGEPDistance, "ref_env_var_gep");
-                // load var address
-                llvm::Value* varLocationLoaded = builder->CreateLoad(
-                    refEnvStructType->getElementType(varGEPDistance),
-                    refEnvVarGEP);
-                // set closure var location
-                var = varLocationLoaded;
-                // mark as var found
+                // load the actual variable's LHS = pointer
+                llvm::Value* loadedValue = builder->CreateLoad(
+                    finalRefEnvType->getElementType(varGEPDistance), varGEP);
+                var = loadedValue;
                 varFoundInClosure = true;
               }
             }
