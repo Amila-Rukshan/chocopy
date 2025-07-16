@@ -227,6 +227,7 @@ void SemanticCheckVisitor::visitListLiteralExpr(
 }
 
 std::string SemanticCheckVisitor::getFQN(const CallExprAST& callExpr) {
+  // TODO: change this logic to suit cases where calling a top level function by another
   if (auto callee = llvm::dyn_cast<IdExprAST>(callExpr.getCallee())) {
     if (callExpr.getSelfExpr())
       return callExpr.getSelfExpr()->getTypeInfo() + "-" +

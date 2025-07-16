@@ -738,8 +738,12 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
     binaryExpr.getRhs()->accept(*this);
     llvm::Value* lhsVal = binaryExpr.getLhs()->getCodegenValue();
     llvm::Value* rhsVal = binaryExpr.getRhs()->getCodegenValue();
-    llvm::Value* modVal = builder->CreateSRem(lhsVal, rhsVal, "mod_ints");
-    binaryExpr.setCodegenValue(modVal);
+    llvm::Value* rem = builder->CreateSRem(lhsVal, rhsVal, "mod_ints");
+    llvm::Value* isNeg =
+        builder->CreateICmpSLT(rem, llvm::ConstantInt::get(rem->getType(), 0));
+    llvm::Value* adjusted = builder->CreateAdd(rem, rhsVal);
+    llvm::Value* finalMod = builder->CreateSelect(isNeg, adjusted, rem);
+    binaryExpr.setCodegenValue(finalMod);
     return;
   }
   case TokenKind::kLessThan: {
@@ -1559,7 +1563,7 @@ void LLVMCodeGenVisitor::visitSimpleStmtAssign(
 
   auto rhsType = simpleStmtAssign.getRhs()->getTypeInfo();
   if (auto rhsId = llvm::dyn_cast<IdExprAST>(simpleStmtAssign.getRhs())) {
-    if (llvmClass(rhsType)) {
+    if (llvmClass(rhsType) || isListType(rhsType)) {
       llvm::Type* fieldType = llvmTypeOrClassPtrType(rhsType);
       rhsValue =
           builder->CreateLoad(fieldType, rhsValue, "field_val_loaded_id");
@@ -1943,6 +1947,13 @@ void LLVMCodeGenVisitor::visitSimpleStmtReturn(
   if (simpleStmtReturn.getExpr()) {
     simpleStmtReturn.getExpr()->accept(*this);
     llvm::Value* retValue = simpleStmtReturn.getExpr()->getCodegenValue();
+    std::string retValueType = simpleStmtReturn.getExpr()->getTypeInfo();
+    if (auto rhsId = llvm::dyn_cast<IdExprAST>(simpleStmtReturn.getExpr())) {
+      if (llvmClass(retValueType) || isListType(retValueType)) {
+        llvm::Type* llvmType = llvmTypeOrClassPtrType(retValueType);
+        retValue = builder->CreateLoad(llvmType, retValue, "loaded_ret_value");
+      }
+    }
     builder->CreateRet(retValue);
   } else {
     builder->CreateRet(
