@@ -470,7 +470,8 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
         auto type = arg->getTypeInfo();
         arg->accept(*this);
         if (llvmClass(type) || isListType(type)) {
-          if (auto idExpr = llvm::dyn_cast<IdExprAST>(arg.get())) {
+          if (llvm::isa<IdExprAST>(arg.get()) ||
+              llvm::isa<BinaryExprAST>(arg.get())) {
             llvm::Value* argVal = arg->getCodegenValue();
             llvm::Value* loadedArgVal = builder->CreateLoad(
                 argVal->getType(), argVal, "loaded_arg_val");
