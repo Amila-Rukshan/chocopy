@@ -1,7 +1,13 @@
 #include <filesystem>
 #include <iostream>
 
+#include "Backend.h"
 #include "CodeGen.h"
+
+#include "llvm/IR/Verifier.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/FileUtilities.h"
+#include "llvm/Support/Path.h"
 
 namespace chocopy {
 
@@ -19,14 +25,58 @@ const FunctionAST* LLVMCodeGenVisitor::currentFunction() const {
   return functionStack.empty() ? nullptr : functionStack.top();
 }
 
-void LLVMCodeGenVisitor::printLLVMBitCode(llvm::StringRef outputPath) const {
+bool LLVMCodeGenVisitor::verifyModule() const {
+  if (llvm::verifyModule(*module, &llvm::errs())) {
+    llvm::errs() << "Internal error: generated invalid LLVM IR\n";
+    return false;
+  }
+  return true;
+}
+
+bool LLVMCodeGenVisitor::writeLLVMIR(llvm::StringRef outputPath) const {
   std::error_code error;
-  llvm::raw_fd_ostream dest(outputPath.str() + ".ll", error);
+  llvm::raw_fd_ostream dest(outputPath, error);
   if (error) {
-    llvm::errs() << "Failed to print LLVM bitcode" << error.message() << "\n";
-    return;
+    llvm::errs() << "Failed to write LLVM IR to " << outputPath << ": "
+                 << error.message() << "\n";
+    return false;
   }
   module->print(dest, nullptr);
+  return true;
+}
+
+bool LLVMCodeGenVisitor::emitObjectFile(llvm::StringRef outputPath) const {
+  if (!verifyModule())
+    return false;
+  std::string error;
+  if (!chocopy::emitObjectFile(*module, *targetMachine, outputPath, error)) {
+    llvm::errs() << error << "\n";
+    return false;
+  }
+  return true;
+}
+
+bool LLVMCodeGenVisitor::emitExecutable(llvm::StringRef outputPath,
+                                        llvm::StringRef runtimeLibPath) const {
+  llvm::SmallString<128> objectPath;
+  if (std::error_code ec = llvm::sys::fs::createTemporaryFile(
+          llvm::sys::path::filename(outputPath), "o", objectPath)) {
+    llvm::errs() << "Could not create temporary object file: " << ec.message()
+                 << "\n";
+    return false;
+  }
+  llvm::FileRemover objectRemover(objectPath);
+
+  if (!emitObjectFile(objectPath))
+    return false;
+
+  std::string error;
+  if (!linkExecutable(objectPath, runtimeLibPath, outputPath,
+                      module->getTargetTriple(), error)) {
+    llvm::errs() << error << "\n";
+    return false;
+  }
+  return true;
 }
 
 const VirtualTable& LLVMCodeGenVisitor::getVTable(const ClassAST* classPtr) {
@@ -53,7 +103,15 @@ void LLVMCodeGenVisitor::codeGen() {
   std::string fileName = path.filename().string();
 
   module = std::make_unique<llvm::Module>(fileName, *context);
-  module->setTargetTriple("x86_64-pc-linux-gnu");
+  std::string error;
+  targetMachine = createHostTargetMachine(error);
+  if (!targetMachine) {
+    llvm::errs() << "Could not create target machine: " << error << "\n";
+    std::exit(1);
+  }
+  // Data layout must be set before codegen so type sizes match the target.
+  module->setTargetTriple(targetMachine->getTargetTriple().str());
+  module->setDataLayout(targetMachine->createDataLayout());
 
   // object class inclusion
   classToVTable.insert(
@@ -400,7 +458,7 @@ void LLVMCodeGenVisitor::visitListLiteralExpr(
     llvm::Type* elemType = llvmTypeOrClassPtrType(
         !elements.empty() ? elements[0]->getTypeInfo() : "<Empty>");
     size_t arraySize =
-        module->getDataLayout().getTypeAllocSize(elemType) * items.size();
+        module->getDataLayout().getTypeAllocSize(elemType).getFixedValue() * items.size();
     llvm::Value* arrayMallocSize =
         llvm::ConstantInt::get(*context, llvm::APInt(32, arraySize));
     llvm::Value* arrayMallocCall = builder->CreateCall(
@@ -950,8 +1008,10 @@ void LLVMCodeGenVisitor::visitBinaryExpr(const BinaryExprAST& binaryExpr) {
       llvm::Value* nonNegative = builder->CreateICmpSGE(
           rhsVal, llvm::ConstantInt::get(rhsVal->getType(), 0),
           "idx_non_negative");
-      llvm::Value* cond =
-          builder->CreateAnd(inBounds, nonNegative, "idx_valid");
+      // runtime_check takes a C int, so widen the i1 condition
+      llvm::Value* cond = builder->CreateZExt(
+          builder->CreateAnd(inBounds, nonNegative, "idx_valid"),
+          llvm::Type::getInt32Ty(*context), "idx_valid_int");
 
       llvm::Constant* fileStr =
           getOrCreateGlobalFmtStr(*(binaryExpr.loc().file), ".src_file");

@@ -13,9 +13,8 @@ RUN apt-get update && apt-get install -y \
     llvm-17-dev \
     clang-17 \
     lld-17 \
+    liblld-17-dev \
     lldb-17 \
-    libmlir-17-dev \
-    mlir-17-tools \
     zlib1g-dev \
     libzstd-dev \
     libedit-dev \
@@ -28,7 +27,6 @@ ENV CXX=/usr/bin/clang++-17
 
 # Set the LLVM_DIR environment variable
 ENV LLVM_DIR=/usr/lib/llvm-17/lib/cmake/llvm/
-ENV MLIR_DIR=/usr/lib/llvm-17/lib/cmake/mlir/
 
 # Set the default shell to bash instead of sh
 SHELL ["/bin/bash", "-c"]

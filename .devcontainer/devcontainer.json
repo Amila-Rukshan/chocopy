@@ -11,7 +11,6 @@
                 "ms-vscode.cmake-tools",
                 "vadimcn.vscode-lldb",
                 "llvm-vs-code-extensions.lldb-dap",
-                "llvm-vs-code-extensions.vscode-mlir",
                 "ms-vscode.cpptools-extension-pack",
                 "kylinideteam.cmake-intellisence"
             ]

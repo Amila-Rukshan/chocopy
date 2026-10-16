@@ -8,7 +8,9 @@ target_include_directories(ParserTest PRIVATE
 
 target_link_libraries(ParserTest
   PRIVATE
-  gtest_main MLIRSupport
+  gtest_main
 )
+
+llvm_config(ParserTest ${_llvm_use_shared} Support)
 
 add_test(NAME ParserTests COMMAND ParserTest)

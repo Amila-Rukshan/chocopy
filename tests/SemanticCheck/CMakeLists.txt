@@ -10,7 +10,8 @@ target_include_directories(SemanticCheckTest PRIVATE
 target_link_libraries(SemanticCheckTest
   PRIVATE
   gtest_main
-  MLIRSupport
 )
+
+llvm_config(SemanticCheckTest ${_llvm_use_shared} Support)
 
 add_test(NAME SemanticCheckTests COMMAND SemanticCheckTest)

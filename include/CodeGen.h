@@ -12,6 +12,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
+#include "llvm/Target/TargetMachine.h"
 
 #include "AST.h"
 #include "Utils.h"
@@ -28,7 +29,12 @@ public:
 
   void codeGen();
   void codeGenMainFunc(const std::vector<std::unique_ptr<StmtAST>>& stmts);
-  void printLLVMBitCode(llvm::StringRef outputPath) const;
+  // Backend: each returns false and prints a diagnostic on failure.
+  bool verifyModule() const;
+  bool writeLLVMIR(llvm::StringRef outputPath) const;
+  bool emitObjectFile(llvm::StringRef outputPath) const;
+  bool emitExecutable(llvm::StringRef outputPath,
+                      llvm::StringRef runtimeLibPath) const;
 
   void visitProgram(const ProgramAST& program) override;
   void visitClass(const ClassAST& clazz) override;
@@ -96,6 +102,7 @@ private:
   std::unique_ptr<llvm::LLVMContext> context;
   std::unique_ptr<llvm::IRBuilder<>> builder;
   std::unique_ptr<llvm::Module> module;
+  std::unique_ptr<llvm::TargetMachine> targetMachine;
 
   const FunctionAST* currentFunction() const;
 

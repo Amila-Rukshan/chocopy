@@ -1,0 +1,20 @@
+--- !tapi-tbd
+# Link-time stub for macOS libSystem: the C library symbols that ChocoPy
+# programs and the runtime (std/*.c) import. The linker only needs to know
+# which dylib exports them; dyld binds them from the real libSystem at run
+# time. This keeps linking independent of the installed macOS SDK.
+#
+# The runtime imports differ by build type: Apple's fortify headers produce
+# ___str*_chk at -O0, which the optimizer folds back to plain _str* calls.
+# A new libc call in codegen or the runtime must be added here, otherwise
+# linking fails with "undefined symbol".
+tbd-version:     4
+targets:         [ x86_64-macos, arm64-macos ]
+install-name:    '/usr/lib/libSystem.B.dylib'
+current-version: 1351
+exports:
+  - targets:     [ x86_64-macos, arm64-macos ]
+    symbols:     [ ___strcat_chk, ___strcpy_chk, _exit, _malloc, _memcpy,
+                   _printf, _puts, _strcat, _strcmp, _strcpy, _strlen,
+                   dyld_stub_binder ]
+...

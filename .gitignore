@@ -13,3 +13,7 @@ tests-choco
 string.o
 support.o
 runtime.o
+*.dSYM/
+# compiler outputs next to test programs (executables, objects, IR)
+/testprograms/*
+!/testprograms/*.py

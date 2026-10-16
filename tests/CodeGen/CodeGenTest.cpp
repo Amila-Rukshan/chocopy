@@ -4,6 +4,7 @@
 #include "gtest/gtest.h"
 
 #include "AST.h"
+#include "Backend.h"
 #include "CodeGen.h"
 #include "Lexer.h"
 #include "Parser.h"
@@ -11,25 +12,15 @@
 
 namespace chocopy {
 
-std::string runIRAndGetOutput(const std::string& irFile) {
-  std::string base = irFile;
-  if (base.size() > 6 && base.substr(base.size() - 6) == ".py.ll")
-    base = base.substr(0, base.size() - 6);
-  std::string binaryFile = base + ".bin";
-  std::string clangCmd = "clang-17 " + irFile + ".ll";
-#ifdef CHOCOPY_LIB_PATH
-  clangCmd += " " + std::string(CHOCOPY_LIB_PATH);
-#endif
-  clangCmd += " -o " + binaryFile + " -g 2>&1";
-  int clangResult = std::system(clangCmd.c_str());
-  EXPECT_EQ(clangResult, 0) << "Clang failed to compile IR";
+std::string runAndGetOutput(const std::string& binaryFile) {
+  std::string outFile = binaryFile + ".out";
+  std::string runCmd = binaryFile + " > " + outFile;
+  std::system(runCmd.c_str());
 
-  std::string runCmd = binaryFile + " > " + irFile + ".out";
-  int runResult = std::system(runCmd.c_str());
-
-  std::ifstream outFile(irFile + ".out");
+  std::ifstream out(outFile);
   std::stringstream buffer;
-  buffer << outFile.rdbuf();
+  buffer << out.rdbuf();
+  std::remove(outFile.c_str());
   return buffer.str();
 }
 
@@ -116,17 +107,17 @@ TEST(CodeGenTest, MultiplePrograms) {
 
     chocopy::LLVMCodeGenVisitor codeGenVisitor(programAST.get(), filename);
     codeGenVisitor.codeGen();
-    codeGenVisitor.printLLVMBitCode(filename);
 
-    std::string output = runIRAndGetOutput(filename);
+    std::string binFile = filename + ".bin";
+    if (!codeGenVisitor.emitExecutable(binFile, defaultRuntimeLibPath())) {
+      ADD_FAILURE() << "Failed to build executable";
+      continue;
+    }
+
+    std::string output = runAndGetOutput(binFile);
     EXPECT_EQ(output, expectedOutput[idx]);
 
-    std::string llFile = filename + ".ll";
-    std::string binFile = filename + ".bin";
-    std::string outFile = filename + ".out";
-    std::remove(llFile.c_str());
     std::remove(binFile.c_str());
-    std::remove(outFile.c_str());
   }
 }
 
