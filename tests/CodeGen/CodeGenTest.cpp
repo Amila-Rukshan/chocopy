@@ -4,7 +4,6 @@
 #include "gtest/gtest.h"
 
 #include "AST.h"
-#include "Backend.h"
 #include "CodeGen.h"
 #include "Lexer.h"
 #include "Parser.h"
@@ -109,7 +108,7 @@ TEST(CodeGenTest, MultiplePrograms) {
     codeGenVisitor.codeGen();
 
     std::string binFile = filename + ".bin";
-    if (!codeGenVisitor.emitExecutable(binFile, defaultRuntimeLibPath())) {
+    if (!codeGenVisitor.emitExecutable(binFile, CHOCOPY_SUPPORT_DIR)) {
       ADD_FAILURE() << "Failed to build executable";
       continue;
     }

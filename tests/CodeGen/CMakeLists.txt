@@ -6,10 +6,17 @@ target_include_directories(CodeGenTest PRIVATE
   ${googletest_SOURCE_DIR}/googletest/include
 )
 
+target_compile_definitions(CodeGenTest
+  PRIVATE
+  CHOCOPY_SUPPORT_DIR="${CHOCOPY_SUPPORT_DIR}"
+)
+
 target_link_libraries(CodeGenTest
   PRIVATE
   gtest_main
   ChocoPyCompiler
 )
 
-add_test(NAME CodeGenTests COMMAND CodeGenTest)
+# Test programs are referenced as ./testprograms/...
+add_test(NAME CodeGenTests COMMAND CodeGenTest
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

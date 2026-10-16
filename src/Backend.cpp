@@ -6,6 +6,7 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
@@ -19,15 +20,19 @@ namespace chocopy {
 
 namespace {
 
-bool fileExists(const std::string& path) {
-  return !path.empty() && llvm::sys::fs::exists(path);
+const char* const runtimeLibName = "libChocopySupport.a";
+const char* const libSystemStubName = "libSystem.tbd";
+
+std::string joinPath(llvm::StringRef dir, llvm::StringRef file) {
+  llvm::SmallString<256> path(dir);
+  llvm::sys::path::append(path, file);
+  return path.str().str();
 }
 
 std::vector<std::string> machOLinkArgs(const llvm::Triple& triple,
                                        llvm::StringRef objectPath,
-                                       llvm::StringRef runtimeLibPath,
+                                       llvm::StringRef supportDir,
                                        llvm::StringRef outputPath) {
-#ifdef __APPLE__
   std::string arch = triple.isAArch64() ? "arm64" : triple.getArchName().str();
   // The SDK version is only recorded in the binary; use the deployment target
   // since no SDK is involved in the link.
@@ -41,60 +46,76 @@ std::vector<std::string> machOLinkArgs(const llvm::Triple& triple,
           "-o",
           outputPath.str(),
           objectPath.str(),
-          runtimeLibPath.str(),
-          CHOCOPY_MACOS_LIBSYSTEM_STUB};
-#else
-  return {};
-#endif
+          joinPath(supportDir, runtimeLibName),
+          joinPath(supportDir, libSystemStubName)};
 }
 
-std::vector<std::string> elfLinkArgs(llvm::StringRef objectPath,
-                                     llvm::StringRef runtimeLibPath,
-                                     llvm::StringRef outputPath) {
-#ifdef __linux__
-  std::string crtDir = CHOCOPY_LINUX_CRT_DIR;
-  std::string gccDir = CHOCOPY_LINUX_GCC_DIR;
+// Directory with glibc's startup files and libc.so, searched in the standard
+// Debian/Ubuntu (multiarch) and Fedora/Arch locations.
+std::string findLinuxLibcDir(const llvm::Triple& triple) {
+  std::string multiarch = triple.getArchName().str() + "-linux-gnu";
+  for (const std::string& dir :
+       {"/usr/lib/" + multiarch, std::string("/usr/lib64"),
+        std::string("/usr/lib"), "/lib/" + multiarch, std::string("/lib64")}) {
+    if (llvm::sys::fs::exists(joinPath(dir, "Scrt1.o")))
+      return dir;
+  }
+  return "";
+}
 
-  std::vector<std::string> args = {"ld.lld",
-                                   "--eh-frame-hdr",
-                                   "-pie",
-                                   "-dynamic-linker",
-                                   CHOCOPY_LINUX_DYNAMIC_LINKER,
-                                   "-o",
-                                   outputPath.str(),
-                                   crtDir + "/Scrt1.o",
-                                   crtDir + "/crti.o"};
-  // crtbegin/crtend come from GCC and are optional for plain C code.
-  bool hasGccCrt = fileExists(gccDir + "/crtbeginS.o");
-  if (hasGccCrt)
-    args.push_back(gccDir + "/crtbeginS.o");
+// Fixed by each architecture's glibc ABI.
+const char* linuxDynamicLinker(const llvm::Triple& triple) {
+  switch (triple.getArch()) {
+  case llvm::Triple::x86_64:
+    return "/lib64/ld-linux-x86-64.so.2";
+  case llvm::Triple::aarch64:
+    return "/lib/ld-linux-aarch64.so.1";
+  default:
+    return nullptr;
+  }
+}
 
-  args.push_back(objectPath.str());
-  args.push_back(runtimeLibPath.str());
-  args.push_back("-L" + crtDir);
-  if (!gccDir.empty())
-    args.push_back("-L" + gccDir);
-  args.push_back("-lc");
+bool elfLinkArgs(const llvm::Triple& triple, llvm::StringRef objectPath,
+                 llvm::StringRef supportDir, llvm::StringRef outputPath,
+                 std::vector<std::string>& args, std::string& error) {
+  const char* dynamicLinker = linuxDynamicLinker(triple);
+  if (!dynamicLinker) {
+    error = "Linking is not supported for architecture " +
+            triple.getArchName().str();
+    return false;
+  }
+  std::string libcDir = findLinuxLibcDir(triple);
+  if (libcDir.empty()) {
+    error = "Could not find the C library startup files (Scrt1.o); install "
+            "the libc development package (libc6-dev or glibc-devel)";
+    return false;
+  }
 
-  if (hasGccCrt)
-    args.push_back(gccDir + "/crtendS.o");
-  args.push_back(crtDir + "/crtn.o");
-  return args;
-#else
-  return {};
-#endif
+  args = {"ld.lld",
+          "--eh-frame-hdr",
+          "-pie",
+          "-dynamic-linker",
+          dynamicLinker,
+          "-o",
+          outputPath.str(),
+          joinPath(libcDir, "Scrt1.o"),
+          joinPath(libcDir, "crti.o"),
+          objectPath.str(),
+          joinPath(supportDir, runtimeLibName),
+          "-L" + libcDir,
+          "-lc",
+          joinPath(libcDir, "crtn.o")};
+  return true;
 }
 
 } // namespace
 
 std::string getHostTargetTriple() {
   llvm::Triple triple(llvm::sys::getProcessTriple());
-#ifdef __APPLE__
   // Use an explicit macOS version so objects match the -platform_version
   // passed to the linker.
   if (triple.isOSDarwin())
     triple.setOSName(std::string("macosx") + CHOCOPY_MACOS_MIN_VERSION);
-#endif
   return triple.str();
 }
 
@@ -136,22 +157,22 @@ bool emitObjectFile(llvm::Module& module, llvm::TargetMachine& targetMachine,
   return true;
 }
 
-bool linkExecutable(llvm::StringRef objectPath, llvm::StringRef runtimeLibPath,
+bool linkExecutable(llvm::StringRef objectPath, llvm::StringRef supportDir,
                     llvm::StringRef outputPath, llvm::StringRef targetTriple,
                     std::string& error) {
-  if (!fileExists(runtimeLibPath.str())) {
-    error = "ChocoPy runtime library not found: " + runtimeLibPath.str();
+  if (!llvm::sys::fs::exists(joinPath(supportDir, runtimeLibName))) {
+    error = "ChocoPy runtime library not found in " + supportDir.str();
     return false;
   }
 
   llvm::Triple triple(targetTriple);
   std::vector<std::string> args;
-  if (triple.isOSDarwin())
-    args = machOLinkArgs(triple, objectPath, runtimeLibPath, outputPath);
-  else if (triple.isOSLinux())
-    args = elfLinkArgs(objectPath, runtimeLibPath, outputPath);
-
-  if (args.empty()) {
+  if (triple.isOSDarwin()) {
+    args = machOLinkArgs(triple, objectPath, supportDir, outputPath);
+  } else if (triple.isOSLinux()) {
+    if (!elfLinkArgs(triple, objectPath, supportDir, outputPath, args, error))
+      return false;
+  } else {
     error = "Linking is not supported for target " + targetTriple.str();
     return false;
   }
@@ -176,6 +197,14 @@ bool linkExecutable(llvm::StringRef objectPath, llvm::StringRef runtimeLibPath,
   return true;
 }
 
-std::string defaultRuntimeLibPath() { return CHOCOPY_RUNTIME_LIB; }
+std::string defaultSupportDir() {
+  // Same layout in the build tree and an install: bin/chocopyc and
+  // lib/chocopy/
+  static int anchor;
+  std::string exe = llvm::sys::fs::getMainExecutable(nullptr, &anchor);
+  llvm::SmallString<256> dir(llvm::sys::path::parent_path(exe));
+  llvm::sys::path::append(dir, "..", "lib", "chocopy");
+  return dir.str().str();
+}
 
 } // namespace chocopy

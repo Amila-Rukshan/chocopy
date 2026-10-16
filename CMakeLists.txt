@@ -34,41 +34,16 @@ include_directories(include/)
 # Minimum macOS version for the runtime library and generated programs
 set(CHOCOPY_MACOS_MIN_VERSION "11.0" CACHE STRING "Minimum macOS version of compiled ChocoPy programs")
 
+option(CHOCOPY_STATIC_LINK
+  "Link LLVM, lld, zstd and the C++ runtime statically (redistributable chocopyc)" OFF)
+
+# The build tree mirrors the install layout: chocopyc in bin/ finds the
+# runtime library (and the macOS libSystem stub) in lib/chocopy/
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CHOCOPY_SUPPORT_DIR ${CMAKE_BINARY_DIR}/lib/chocopy)
+
 # Runtime library linked into every compiled ChocoPy program
 add_subdirectory(std)
-
-# Platform details the embedded linker needs, detected at configure time
-if(APPLE)
-  # Programs link against a libSystem stub shipped with the compiler, so no
-  # macOS SDK is needed at link time.
-  set(CHOCOPY_PLATFORM_DEFINITIONS
-    CHOCOPY_MACOS_LIBSYSTEM_STUB="${CMAKE_SOURCE_DIR}/std/libSystem.tbd"
-    CHOCOPY_MACOS_MIN_VERSION="${CHOCOPY_MACOS_MIN_VERSION}")
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  execute_process(COMMAND ${CMAKE_C_COMPILER} -print-file-name=Scrt1.o
-    OUTPUT_VARIABLE _scrt1 OUTPUT_STRIP_TRAILING_WHITESPACE)
-  execute_process(COMMAND ${CMAKE_C_COMPILER} -print-file-name=crtbeginS.o
-    OUTPUT_VARIABLE _crtbegin OUTPUT_STRIP_TRAILING_WHITESPACE)
-  get_filename_component(_crt_dir "${_scrt1}" DIRECTORY)
-  get_filename_component(_gcc_dir "${_crtbegin}" DIRECTORY)
-  set(CHOCOPY_LINUX_CRT_DIR "${_crt_dir}" CACHE PATH "Directory with Scrt1.o, crti.o, crtn.o and libc")
-  set(CHOCOPY_LINUX_GCC_DIR "${_gcc_dir}" CACHE PATH "Directory with crtbeginS.o and crtendS.o")
-  if(NOT EXISTS "${CHOCOPY_LINUX_CRT_DIR}/Scrt1.o")
-    message(FATAL_ERROR "Could not find Scrt1.o; install libc6-dev or set CHOCOPY_LINUX_CRT_DIR")
-  endif()
-
-  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
-    set(_dynamic_linker "/lib/ld-linux-aarch64.so.1")
-  else()
-    set(_dynamic_linker "/lib64/ld-linux-x86-64.so.2")
-  endif()
-  set(CHOCOPY_LINUX_DYNAMIC_LINKER "${_dynamic_linker}" CACHE FILEPATH "Dynamic linker for generated programs")
-
-  set(CHOCOPY_PLATFORM_DEFINITIONS
-    CHOCOPY_LINUX_CRT_DIR="${CHOCOPY_LINUX_CRT_DIR}"
-    CHOCOPY_LINUX_GCC_DIR="${CHOCOPY_LINUX_GCC_DIR}"
-    CHOCOPY_LINUX_DYNAMIC_LINKER="${CHOCOPY_LINUX_DYNAMIC_LINKER}")
-endif()
 
 # Front end, LLVM code generation and the embedded linker
 add_library(ChocoPyCompiler STATIC
@@ -78,28 +53,58 @@ add_library(ChocoPyCompiler STATIC
 
 target_compile_definitions(ChocoPyCompiler
   PRIVATE
-  CHOCOPY_RUNTIME_LIB="$<TARGET_FILE:ChocopySupport>"
-  ${CHOCOPY_PLATFORM_DEFINITIONS})
+  CHOCOPY_MACOS_MIN_VERSION="${CHOCOPY_MACOS_MIN_VERSION}")
 
 target_include_directories(ChocoPyCompiler PUBLIC ${LLD_INCLUDE_DIRS})
 
-if(LLVM_LINK_LLVM_DYLIB)
+set(_lld_libs lldCommon lldELF lldMachO)
+if(CHOCOPY_STATIC_LINK)
+  # On Linux, zlib and terminfo are linked statically too, leaving only libc
+  # (macOS ships both as system libraries).
+  if(NOT APPLE)
+    find_library(_zlib_static NAMES libz.a REQUIRED)
+    find_library(_tinfo_static NAMES libtinfo.a REQUIRED)
+  endif()
+
+  # The exported lld and LLVM targets link libLLVM and shared libraries; point
+  # them at the static libraries instead.
+  foreach(_target ${_lld_libs} LLVMSupport)
+    get_target_property(_libs ${_target} INTERFACE_LINK_LIBRARIES)
+    list(REMOVE_ITEM _libs LLVM)
+    list(TRANSFORM _libs REPLACE "^zstd::libzstd_shared$" "zstd::libzstd_static")
+    if(NOT APPLE)
+      list(TRANSFORM _libs REPLACE "^ZLIB::ZLIB$" "${_zlib_static}")
+      list(TRANSFORM _libs REPLACE "^Terminfo::terminfo$" "${_tinfo_static}")
+    endif()
+    set_target_properties(${_target} PROPERTIES INTERFACE_LINK_LIBRARIES "${_libs}")
+  endforeach()
+  # LLVM components lld itself needs, normally provided by libLLVM. lld's
+  # drivers initialize every target for LTO, so all of them are linked.
+  set(_lld_components
+    ${LLVM_TARGETS_TO_BUILD} BinaryFormat BitReader BitWriter CodeGen
+    DebugInfoDWARF Demangle LTO ObjCARCOpts Object Option TextAPI)
+elseif(LLVM_LINK_LLVM_DYLIB)
   set(_llvm_use_shared USE_SHARED)
 endif()
-llvm_config(ChocoPyCompiler ${_llvm_use_shared}
-  native Core Support TargetParser MC Target Passes)
 
-target_link_libraries(ChocoPyCompiler
-  PUBLIC
-  lldCommon
-  lldELF
-  lldMachO)
+# lld before the LLVM libraries it uses: GNU ld resolves static archives in
+# a single left-to-right pass
+target_link_libraries(ChocoPyCompiler PUBLIC ${_lld_libs})
+
+llvm_config(ChocoPyCompiler ${_llvm_use_shared}
+  native Core Support TargetParser MC Target Passes ${_lld_components})
 
 add_dependencies(ChocoPyCompiler ChocopySupport)
 
 add_executable(chocopyc ChocoPy.cpp)
 
 target_link_libraries(chocopyc PRIVATE ChocoPyCompiler)
+
+if(CHOCOPY_STATIC_LINK AND NOT APPLE)
+  target_link_options(chocopyc PRIVATE -static-libstdc++ -static-libgcc)
+endif()
+
+install(TARGETS chocopyc RUNTIME DESTINATION bin)
 
 option(ENABLE_TESTS "Enable unit tests" OFF)
 
