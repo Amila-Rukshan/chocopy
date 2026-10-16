@@ -56,8 +56,7 @@ bool LLVMCodeGenVisitor::emitObjectFile(llvm::StringRef outputPath) const {
   return true;
 }
 
-bool LLVMCodeGenVisitor::emitExecutable(llvm::StringRef outputPath,
-                                        llvm::StringRef supportDir) const {
+bool LLVMCodeGenVisitor::emitExecutable(llvm::StringRef outputPath) const {
   llvm::SmallString<128> objectPath;
   if (std::error_code ec = llvm::sys::fs::createTemporaryFile(
           llvm::sys::path::filename(outputPath), "o", objectPath)) {
@@ -71,8 +70,8 @@ bool LLVMCodeGenVisitor::emitExecutable(llvm::StringRef outputPath,
     return false;
 
   std::string error;
-  if (!linkExecutable(objectPath, supportDir, outputPath,
-                      module->getTargetTriple(), error)) {
+  if (!linkExecutable(objectPath, outputPath, module->getTargetTriple(),
+                      error)) {
     llvm::errs() << error << "\n";
     return false;
   }

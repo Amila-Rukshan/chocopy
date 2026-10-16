@@ -40,19 +40,22 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      - name: Install
+      - name: Package
+        # chocopyc is self-contained: the package is the binary and the README
         run: |
-          cmake --install build --prefix "$PACKAGE" --strip
+          cmake --install build --prefix staging --strip
+          mkdir "$PACKAGE"
+          mv staging/bin/chocopyc "$PACKAGE/"
           cp README.md "$PACKAGE/"
 
       - name: Smoke test the package
         run: |
-          if [ "$RUNNER_OS" = macOS ]; then otool -L "$PACKAGE/bin/chocopyc"; else ldd "$PACKAGE/bin/chocopyc"; fi
+          if [ "$RUNNER_OS" = macOS ]; then otool -L "$PACKAGE/chocopyc"; else ldd "$PACKAGE/chocopyc"; fi
 
           # Compile outside the source tree so only the package is used
           cd "$RUNNER_TEMP"
           cp "$GITHUB_WORKSPACE/testprograms/chocopy_00.py" hello.py
-          "$GITHUB_WORKSPACE/$PACKAGE/bin/chocopyc" hello.py
+          "$GITHUB_WORKSPACE/$PACKAGE/chocopyc" hello.py
           test "$(./hello)" = "Hello, World!"
 
       - name: Archive

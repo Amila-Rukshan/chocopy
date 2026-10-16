@@ -33,8 +33,7 @@ public:
   bool verifyModule() const;
   bool writeLLVMIR(llvm::StringRef outputPath) const;
   bool emitObjectFile(llvm::StringRef outputPath) const;
-  bool emitExecutable(llvm::StringRef outputPath,
-                      llvm::StringRef supportDir) const;
+  bool emitExecutable(llvm::StringRef outputPath) const;
 
   void visitProgram(const ProgramAST& program) override;
   void visitClass(const ClassAST& clazz) override;

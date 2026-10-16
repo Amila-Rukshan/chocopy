@@ -108,7 +108,7 @@ TEST(CodeGenTest, MultiplePrograms) {
     codeGenVisitor.codeGen();
 
     std::string binFile = filename + ".bin";
-    if (!codeGenVisitor.emitExecutable(binFile, CHOCOPY_SUPPORT_DIR)) {
+    if (!codeGenVisitor.emitExecutable(binFile)) {
       ADD_FAILURE() << "Failed to build executable";
       continue;
     }

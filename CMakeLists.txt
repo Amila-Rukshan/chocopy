@@ -37,19 +37,32 @@ set(CHOCOPY_MACOS_MIN_VERSION "11.0" CACHE STRING "Minimum macOS version of comp
 option(CHOCOPY_STATIC_LINK
   "Link LLVM, lld, zstd and the C++ runtime statically (redistributable chocopyc)" OFF)
 
-# The build tree mirrors the install layout: chocopyc in bin/ finds the
-# runtime library (and the macOS libSystem stub) in lib/chocopy/
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CHOCOPY_SUPPORT_DIR ${CMAKE_BINARY_DIR}/lib/chocopy)
 
 # Runtime library linked into every compiled ChocoPy program
 add_subdirectory(std)
+
+# The runtime library and the macOS libSystem stub are compiled into
+# chocopyc, so it ships as a single executable
+set(_embedded_runtime ${CMAKE_BINARY_DIR}/EmbeddedRuntime.cpp)
+add_custom_command(
+  OUTPUT ${_embedded_runtime}
+  COMMAND ${CMAKE_COMMAND}
+          -DOUTPUT=${_embedded_runtime}
+          -DRUNTIME_LIB=$<TARGET_FILE:ChocopySupport>
+          -DLIBSYSTEM_STUB=${CMAKE_SOURCE_DIR}/std/libSystem.tbd
+          -P ${CMAKE_SOURCE_DIR}/cmake/EmbedRuntime.cmake
+  DEPENDS ChocopySupport $<TARGET_FILE:ChocopySupport>
+          ${CMAKE_SOURCE_DIR}/std/libSystem.tbd
+          ${CMAKE_SOURCE_DIR}/cmake/EmbedRuntime.cmake
+  COMMENT "Embedding the ChocoPy runtime")
 
 # Front end, LLVM code generation and the embedded linker
 add_library(ChocoPyCompiler STATIC
   src/Backend.cpp
   src/CodeGen.cpp
-  src/SemanticCheck.cpp)
+  src/SemanticCheck.cpp
+  ${_embedded_runtime})
 
 target_compile_definitions(ChocoPyCompiler
   PRIVATE
@@ -93,8 +106,6 @@ target_link_libraries(ChocoPyCompiler PUBLIC ${_lld_libs})
 
 llvm_config(ChocoPyCompiler ${_llvm_use_shared}
   native Core Support TargetParser MC Target Passes ${_lld_components})
-
-add_dependencies(ChocoPyCompiler ChocopySupport)
 
 add_executable(chocopyc ChocoPy.cpp)
 

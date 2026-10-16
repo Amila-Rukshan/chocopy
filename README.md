@@ -12,11 +12,11 @@ See [chocopy.pdf](./chocopy.pdf) for a full description of ChocoPy language with
 
 ## Install a release
 
-Prebuilt compilers for Linux and macOS (x86_64 and arm64) are attached to each [GitHub release](https://github.com/Amila-Rukshan/chocopy/releases). Each archive holds `bin/chocopyc` and its runtime in `lib/chocopy/`; keep them together and put `bin` on your `PATH`:
+Prebuilt compilers for Linux and macOS (x86_64 and arm64) are attached to each [GitHub release](https://github.com/Amila-Rukshan/chocopy/releases). `chocopyc` is a single self-contained executable (the ChocoPy runtime is embedded in it); copy it anywhere on your `PATH`:
 
 ```sh
 tar -xzf chocopy-<version>-<os>-<arch>.tar.gz
-export PATH="$PWD/chocopy-<version>-<os>-<arch>/bin:$PATH"
+cp chocopy-<version>-<os>-<arch>/chocopyc /usr/local/bin/
 chocopyc hello.py && ./hello
 ```
 
@@ -46,9 +46,9 @@ cmake --build build
 
 Add `-DENABLE_TESTS=ON` to the configure step to build the unit tests (run them with `ctest --test-dir build`). The VSCode `Debug ChocoPy` and test launch configurations also work locally.
 
-`-DCHOCOPY_STATIC_LINK=ON` links LLVM and lld statically, producing a redistributable compiler; `cmake --install build --prefix <dir>` installs it with its runtime.
+`-DCHOCOPY_STATIC_LINK=ON` links LLVM and lld statically, producing a redistributable compiler; `cmake --install build --prefix <dir>` installs it as `<dir>/bin/chocopyc`.
 
-On macOS, generated programs link against [`std/libSystem.tbd`](./std/libSystem.tbd), a stub listing the C library symbols ChocoPy uses, so no macOS SDK is needed to link them.
+On macOS, generated programs link against [`std/libSystem.tbd`](./std/libSystem.tbd), a stub listing the C library symbols ChocoPy uses, so no macOS SDK is needed to link them. The stub and the runtime library built from `std/` are embedded in `chocopyc` at build time.
 
 ### Using the compiler
 

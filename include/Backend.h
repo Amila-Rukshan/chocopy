@@ -22,15 +22,10 @@ bool emitObjectFile(llvm::Module& module, llvm::TargetMachine& targetMachine,
                     llvm::StringRef outputPath, std::string& error);
 
 // Links an object file with the ChocoPy runtime library and the system C
-// library into an executable, using the embedded lld linker. supportDir holds
-// the runtime library (and the libSystem stub on macOS).
-bool linkExecutable(llvm::StringRef objectPath, llvm::StringRef supportDir,
-                    llvm::StringRef outputPath, llvm::StringRef targetTriple,
-                    std::string& error);
-
-// Support directory of the running chocopyc: <prefix>/lib/chocopy next to
-// <prefix>/bin/chocopyc.
-std::string defaultSupportDir();
+// library into an executable, using the embedded lld linker. The runtime
+// library is embedded in chocopyc.
+bool linkExecutable(llvm::StringRef objectPath, llvm::StringRef outputPath,
+                    llvm::StringRef targetTriple, std::string& error);
 
 } // namespace chocopy
 

@@ -6,11 +6,6 @@ target_include_directories(CodeGenTest PRIVATE
   ${googletest_SOURCE_DIR}/googletest/include
 )
 
-target_compile_definitions(CodeGenTest
-  PRIVATE
-  CHOCOPY_SUPPORT_DIR="${CHOCOPY_SUPPORT_DIR}"
-)
-
 target_link_libraries(CodeGenTest
   PRIVATE
   gtest_main

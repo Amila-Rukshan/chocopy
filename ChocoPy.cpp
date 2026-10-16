@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
   bool ok = false;
   switch (emitKind) {
   case EmitKind::Exe:
-    ok = codegen.emitExecutable(output, chocopy::defaultSupportDir());
+    ok = codegen.emitExecutable(output);
     break;
   case EmitKind::Obj:
     ok = codegen.emitObjectFile(output);
