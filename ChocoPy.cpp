@@ -39,11 +39,6 @@ static llvm::cl::opt<EmitKind> emitKind(
         clEnumValN(EmitKind::LLVM, "llvm", "LLVM IR (.ll)")),
     llvm::cl::cat(chocopyCategory));
 
-static llvm::cl::opt<std::string>
-    runtimeLib("runtime-lib", llvm::cl::desc("ChocoPy runtime library to link"),
-               llvm::cl::init(chocopy::defaultRuntimeLibPath()),
-               llvm::cl::value_desc("path"), llvm::cl::cat(chocopyCategory));
-
 // foo.py -> foo (exe), foo.o (obj), foo.py.ll (llvm)
 static std::string defaultOutputFilename(llvm::StringRef input, EmitKind kind) {
   if (input == "-")
@@ -102,7 +97,7 @@ int main(int argc, char** argv) {
   bool ok = false;
   switch (emitKind) {
   case EmitKind::Exe:
-    ok = codegen.emitExecutable(output, runtimeLib);
+    ok = codegen.emitExecutable(output, chocopy::defaultSupportDir());
     break;
   case EmitKind::Obj:
     ok = codegen.emitObjectFile(output);

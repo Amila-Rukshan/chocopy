@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     clang-17 \
     lld-17 \
     liblld-17-dev \
+    libpolly-17-dev \
     lldb-17 \
     zlib1g-dev \
     libzstd-dev \

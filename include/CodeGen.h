@@ -34,7 +34,7 @@ public:
   bool writeLLVMIR(llvm::StringRef outputPath) const;
   bool emitObjectFile(llvm::StringRef outputPath) const;
   bool emitExecutable(llvm::StringRef outputPath,
-                      llvm::StringRef runtimeLibPath) const;
+                      llvm::StringRef supportDir) const;
 
   void visitProgram(const ProgramAST& program) override;
   void visitClass(const ClassAST& clazz) override;
