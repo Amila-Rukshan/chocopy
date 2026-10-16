@@ -75,7 +75,7 @@ private:
       ++curLineNum;
       curCol = 0;
     }
-    return nextchar;
+    return static_cast<unsigned char>(nextchar);
   }
 
   TokenKind getToken() {
@@ -189,10 +189,10 @@ private:
 
     // Identifier: [a-zA-Z][a-zA-Z0-9_]*
     if (isalpha(lastChar) || lastChar == '_') {
-      identifierStr = lastChar;
+      identifierStr = static_cast<char>(lastChar);
       lastChar = getNextChar();
       while (isalnum(lastChar) || lastChar == '_') {
-        identifierStr += lastChar;
+        identifierStr += static_cast<char>(lastChar);
         lastChar = getNextChar();
       }
 
@@ -273,7 +273,7 @@ private:
     if (isdigit(lastChar)) {
       std::string intStr;
       do {
-        intStr += lastChar;
+        intStr += static_cast<char>(lastChar);
         lastChar = getNextChar();
       } while (isdigit(lastChar));
       intValue = std::stoll(intStr);
@@ -311,7 +311,7 @@ private:
           if (lastChar < 32 || lastChar > 126) {
             return TokenKind::kUnknown;
           }
-          strLiteral += lastChar;
+          strLiteral += static_cast<char>(lastChar);
         }
         lastChar = getNextChar();
       }
@@ -439,7 +439,7 @@ private:
     std::string identifierStr;
     int64_t intValue;
     std::string strLiteral;
-    char lastChar;
+    int lastChar;
     bool isLogicalLine;
     int prevLineIndentLevel;
     int currentLineIndentLevel;
@@ -495,7 +495,7 @@ private:
   int64_t intValue = 0;
   std::string strLiteral;
 
-  char lastChar = '\0';
+  int lastChar = '\0';
   // flag for processing indentation
   bool isLogicalLine = false;
 
