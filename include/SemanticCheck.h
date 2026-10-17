@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <stack>
+#include <unordered_set>
 
 #include "AST.h"
 #include "Utils.h"
@@ -61,13 +62,23 @@ public:
   void visitStmtFor(const StmtForAST& stmtFor) override;
 
 private:
-  std::string getFQN(const CallExprAST& callExpr);
+  void registerFunction(const FunctionAST& func, const std::string& prefix);
+  const FunctionAST* resolveFunction(const std::string& name) const;
+  ClassAST* findClass(const std::string& classId) const;
 
-  inline bool isSubTypeOf(const std::string& subType,
-                          const std::string& superType);
+  void checkGlobalNames(const ProgramAST& program);
+  void checkCallArgs(const CallExprAST& callExpr, const FunctionAST& func,
+                     size_t hiddenParams);
+  bool alwaysReturns(const std::vector<std::unique_ptr<StmtAST>>& stmts);
+  bool isValidTypeAnnotation(const TypeAST* type);
+  void checkNotObjectAnnotation(const TypeAST* type);
 
-  inline std::string typeUnion(const std::string& lhsType,
-                               const std::string& rhsType);
+  // T1 <= T2: ordinary conformance in the class hierarchy
+  bool isSubClassOf(const std::string& subType, const std::string& superType);
+  // T1 <=a T2: assignment compatibility
+  bool isAssignable(const std::string& subType, const std::string& superType);
+
+  std::string typeUnion(const std::string& lhsType, const std::string& rhsType);
 
   const FunctionAST* currentFunction() const;
 
@@ -82,6 +93,9 @@ private:
   std::unordered_map<std::string, const FunctionAST*> definedFunctions;
   std::unordered_map<std::string, std::string> globalVarToType;
   std::unordered_map<std::string, std::string> localVarToType;
+  // Variables the current function may assign to: its parameters, locals and
+  // global/nonlocal declarations. Inherited bindings are read-only.
+  std::unordered_set<std::string> currentScopeVars;
 
   ClassAST* currentClass = nullptr;
   std::stack<const FunctionAST*> functionStack;

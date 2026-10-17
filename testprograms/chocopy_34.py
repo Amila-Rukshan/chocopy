@@ -12,6 +12,8 @@ def A(c: bool):
     a: C = None
         
     def B():
+        nonlocal x
+        nonlocal y
         x = 5
         y = False
         print(a.a[0])

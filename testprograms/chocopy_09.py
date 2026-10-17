@@ -14,6 +14,7 @@ class A(object):
                 print("Inner If")
                 return 5
             print("Goodbye")
+        return 0
     
 a: A = None
 a = A()

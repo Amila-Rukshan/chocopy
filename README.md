@@ -72,7 +72,7 @@ On macOS, generated programs link against [`std/libSystem.tbd`](./std/libSystem.
 - [x] Method calling with dynamic dispatch
 - [x] Builtin 'print' function
 - [x] Builtin 'str' type
-- [ ] Complete type checking
+- [x] Complete type checking
 - [x] Control flows - `if-elif-else`, `while` and `for`
 - [x] Binary and unary oprations for int, bool and str types
 - [x] List data type support

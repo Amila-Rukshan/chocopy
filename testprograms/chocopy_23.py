@@ -9,6 +9,7 @@ def find_gg(input: [[[str]]], search: str) -> bool:
             for m in l3:
                 if m == search:
                     return True
+    return False
 
 print(find_gg(arr, "Fight Club"))
 print(find_gg(arr, "Inception"))

@@ -31,7 +31,7 @@ class stack(singly_linked_list):
         self.insert(v)
 
     def pop(self: "stack") -> str:
-        popped: str = 0
+        popped: str = ""
         if self.head is None:
             return ""
         popped = self.head.val

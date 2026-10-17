@@ -22,6 +22,18 @@ inline std::string getInnerType(const std::string& type) {
          type.substr(first + 1, type.size() - first - 2);
 }
 
+// The list type whose elements are of the given type, e.g. int -> int[] and
+// int[] -> int[[]]
+inline std::string listOf(const std::string& elementType) {
+  size_t first = elementType.find('[');
+  if (first == std::string::npos)
+    return elementType + "[]";
+  size_t dimension = elementType.size() - first;
+  dimension = dimension / 2 + 1;
+  return elementType.substr(0, first) + std::string(dimension, '[') +
+         std::string(dimension, ']');
+}
+
 } // namespace chocopy
 
 #endif // CHOCOPY_UTILS_H

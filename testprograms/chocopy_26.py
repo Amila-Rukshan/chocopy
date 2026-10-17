@@ -4,6 +4,7 @@ def contains(items:[int], x:int) -> bool:
     for item in items:
         if item == x:
             return True
+    return False
 
 ints:[int] = None
 ints = [4, 8, 15, 16, 23]
