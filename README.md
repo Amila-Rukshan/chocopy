@@ -63,6 +63,17 @@ On macOS, generated programs link against [`std/libSystem.tbd`](./std/libSystem.
 ./build/bin/chocopyc prog.py --emit=llvm        # LLVM IR (prog.py.ll)
 ```
 
+### WebAssembly
+
+`--target=wasm32` compiles to a WebAssembly module instead, linked with the freestanding runtime in [`std/wasm/runtime.c`](./std/wasm/runtime.c) (no C library). Modules only import WASI's `fd_write` and `proc_exit`, so they run under any WASI host or in the browser:
+
+```sh
+./build/bin/chocopyc --target=wasm32 prog.py   # writes prog.wasm
+node tools/run-wasm.mjs prog.wasm              # or: wasmtime prog.wasm
+```
+
+In the browser, [`web/chocopy-wasm.js`](./web/chocopy-wasm.js) provides those two imports; serve the `web/` directory (`python3 -m http.server -d web`) and open `index.html` to run a `.wasm` file.
+
 ## TODOS
 
 - [x] Lexing

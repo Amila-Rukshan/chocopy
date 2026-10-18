@@ -8,14 +8,18 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/Path.h"
+#include "llvm/TargetParser/Triple.h"
 
 namespace chocopy {
 
 LLVMCodeGenVisitor::LLVMCodeGenVisitor(ProgramAST* program,
-                                       llvm::StringRef programPath)
+                                       llvm::StringRef programPath,
+                                       llvm::StringRef targetTriple)
     : context(std::make_unique<llvm::LLVMContext>()),
       builder(std::make_unique<llvm::IRBuilder<>>(*context)),
-      programAST(program), programPath(programPath) {
+      programAST(program), programPath(programPath),
+      targetTriple(targetTriple.empty() ? getHostTargetTriple()
+                                        : targetTriple.str()) {
   scopeManager = std::make_unique<ScopeManager>();
 }
 
@@ -103,7 +107,7 @@ void LLVMCodeGenVisitor::codeGen() {
 
   module = std::make_unique<llvm::Module>(fileName, *context);
   std::string error;
-  targetMachine = createHostTargetMachine(error);
+  targetMachine = createTargetMachine(targetTriple, error);
   if (!targetMachine) {
     llvm::errs() << "Could not create target machine: " << error << "\n";
     std::exit(1);
@@ -137,7 +141,7 @@ void LLVMCodeGenVisitor::codeGen() {
   createBuiltinFuncDecl("strconcat", "str", {"str", "str"});
   createBuiltinFuncDecl("stridx", "str", {"str", "int"});
   createBuiltinFuncDecl("strlength", "int", {"str"});
-  createBuiltinFuncDecl("runtime_check", "int",
+  createBuiltinFuncDecl("runtime_check", "<None>",
                         {"int", "str", "str", "int", "int"});
 
   programAST->accept(*this);
@@ -372,8 +376,11 @@ void LLVMCodeGenVisitor::codeGenMainFunc(
     const std::vector<std::unique_ptr<StmtAST>>& stmts) {
   llvm::FunctionType* funcType =
       llvm::FunctionType::get(llvm::Type::getInt32Ty(*context), false);
+  // On wasm the runtime's _start calls the program; see std/wasm/runtime.c
+  const char* mainName =
+      llvm::Triple(targetTriple).isWasm() ? "chocopy_main" : "main";
   llvm::Function* mainFunc = llvm::Function::Create(
-      funcType, llvm::Function::ExternalLinkage, "main", module.get());
+      funcType, llvm::Function::ExternalLinkage, mainName, module.get());
   llvm::BasicBlock* entryBlock =
       llvm::BasicBlock::Create(*context, "entry", mainFunc);
   builder->SetInsertPoint(entryBlock);

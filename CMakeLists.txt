@@ -42,7 +42,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # Runtime library linked into every compiled ChocoPy program
 add_subdirectory(std)
 
-# The runtime library and the macOS libSystem stub are compiled into
+# The runtime libraries and the macOS libSystem stub are compiled into
 # chocopyc, so it ships as a single executable
 set(_embedded_runtime ${CMAKE_BINARY_DIR}/EmbeddedRuntime.cpp)
 add_custom_command(
@@ -51,9 +51,12 @@ add_custom_command(
           -DOUTPUT=${_embedded_runtime}
           -DRUNTIME_LIB=$<TARGET_FILE:ChocopySupport>
           -DLIBSYSTEM_STUB=${CMAKE_SOURCE_DIR}/std/libSystem.tbd
+          -DWASM_RUNTIME=${CHOCOPY_WASM_RUNTIME}
           -P ${CMAKE_SOURCE_DIR}/cmake/EmbedRuntime.cmake
   DEPENDS ChocopySupport $<TARGET_FILE:ChocopySupport>
+          ChocopyWasmRuntime
           ${CMAKE_SOURCE_DIR}/std/libSystem.tbd
+          ${CHOCOPY_WASM_RUNTIME}
           ${CMAKE_SOURCE_DIR}/cmake/EmbedRuntime.cmake
   COMMENT "Embedding the ChocoPy runtime")
 
@@ -70,7 +73,7 @@ target_compile_definitions(ChocoPyCompiler
 
 target_include_directories(ChocoPyCompiler PUBLIC ${LLD_INCLUDE_DIRS})
 
-set(_lld_libs lldCommon lldELF lldMachO)
+set(_lld_libs lldCommon lldELF lldMachO lldWasm)
 if(CHOCOPY_STATIC_LINK)
   # On Linux, zlib and terminfo are linked statically too, leaving only libc
   # (macOS ships both as system libraries).
@@ -105,7 +108,8 @@ endif()
 target_link_libraries(ChocoPyCompiler PUBLIC ${_lld_libs})
 
 llvm_config(ChocoPyCompiler ${_llvm_use_shared}
-  native Core Support TargetParser MC Target Passes ${_lld_components})
+  native WebAssembly Core Support TargetParser MC Target Passes
+  ${_lld_components})
 
 add_executable(chocopyc ChocoPy.cpp)
 

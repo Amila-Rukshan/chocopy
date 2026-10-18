@@ -17,6 +17,7 @@
 
 LLD_HAS_DRIVER(elf)
 LLD_HAS_DRIVER(macho)
+LLD_HAS_DRIVER(wasm)
 
 namespace chocopy {
 
@@ -26,6 +27,8 @@ extern const unsigned char runtimeLib[];
 extern const size_t runtimeLibSize;
 extern const unsigned char libSystemStub[];
 extern const size_t libSystemStubSize;
+extern const unsigned char wasmRuntime[];
+extern const size_t wasmRuntimeSize;
 } // namespace embedded
 
 namespace {
@@ -138,6 +141,21 @@ bool elfLinkArgs(const llvm::Triple& triple, llvm::StringRef objectPath,
   return true;
 }
 
+// The runtime provides _start, which runs the program's top-level code. Stack
+// first, so an overflow traps instead of corrupting static data.
+std::vector<std::string> wasmLinkArgs(llvm::StringRef objectPath,
+                                      llvm::StringRef runtimePath,
+                                      llvm::StringRef outputPath) {
+  return {"wasm-ld",
+          "--stack-first",
+          "-z",
+          "stack-size=1048576",
+          "-o",
+          outputPath.str(),
+          objectPath.str(),
+          runtimePath.str()};
+}
+
 } // namespace
 
 std::string getHostTargetTriple() {
@@ -149,20 +167,29 @@ std::string getHostTargetTriple() {
   return triple.str();
 }
 
+std::string getWasmTargetTriple() { return "wasm32-unknown-wasi"; }
+
 std::unique_ptr<llvm::TargetMachine>
-createHostTargetMachine(std::string& error) {
+createTargetMachine(llvm::StringRef triple, std::string& error) {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
+  LLVMInitializeWebAssemblyTargetInfo();
+  LLVMInitializeWebAssemblyTarget();
+  LLVMInitializeWebAssemblyTargetMC();
+  LLVMInitializeWebAssemblyAsmPrinter();
 
-  std::string triple = getHostTargetTriple();
   const llvm::Target* target =
-      llvm::TargetRegistry::lookupTarget(triple, error);
+      llvm::TargetRegistry::lookupTarget(triple.str(), error);
   if (!target)
     return nullptr;
 
+  // Native programs are linked as position-independent executables; wasm
+  // modules are linked statically.
+  llvm::Reloc::Model relocModel =
+      llvm::Triple(triple).isWasm() ? llvm::Reloc::Static : llvm::Reloc::PIC_;
   llvm::TargetOptions options;
   return std::unique_ptr<llvm::TargetMachine>(target->createTargetMachine(
-      triple, "generic", "", options, llvm::Reloc::PIC_));
+      triple, "generic", "", options, relocModel));
 }
 
 bool emitObjectFile(llvm::Module& module, llvm::TargetMachine& targetMachine,
@@ -189,19 +216,25 @@ bool emitObjectFile(llvm::Module& module, llvm::TargetMachine& targetMachine,
 
 bool linkExecutable(llvm::StringRef objectPath, llvm::StringRef outputPath,
                     llvm::StringRef targetTriple, std::string& error) {
+  llvm::Triple triple(targetTriple);
+  bool isWasm = triple.isWasm();
   llvm::SmallString<128> runtimeLibPath;
   if (!writeTemporaryFile(
-          "chocopy-runtime", "a",
-          {embedded::runtimeLib, embedded::runtimeLibSize}, runtimeLibPath,
-          error))
+          "chocopy-runtime", isWasm ? "o" : "a",
+          isWasm ? llvm::ArrayRef<unsigned char>(embedded::wasmRuntime,
+                                                 embedded::wasmRuntimeSize)
+                 : llvm::ArrayRef<unsigned char>(embedded::runtimeLib,
+                                                 embedded::runtimeLibSize),
+          runtimeLibPath, error))
     return false;
   llvm::FileRemover runtimeLibRemover(runtimeLibPath);
 
-  llvm::Triple triple(targetTriple);
   std::vector<std::string> args;
   llvm::SmallString<128> libSystemStubPath;
   std::optional<llvm::FileRemover> libSystemStubRemover;
-  if (triple.isOSDarwin()) {
+  if (isWasm) {
+    args = wasmLinkArgs(objectPath, runtimeLibPath, outputPath);
+  } else if (triple.isOSDarwin()) {
     if (!writeTemporaryFile(
             "libSystem", "tbd",
             {embedded::libSystemStub, embedded::libSystemStubSize},
@@ -227,7 +260,9 @@ bool linkExecutable(llvm::StringRef objectPath, llvm::StringRef outputPath,
   llvm::raw_string_ostream linkerOS(linkerOutput);
   lld::Result result =
       lld::lldMain(argv, linkerOS, linkerOS,
-                   {{lld::Gnu, &lld::elf::link}, {lld::Darwin, &lld::macho::link}});
+                   {{lld::Gnu, &lld::elf::link},
+                    {lld::Darwin, &lld::macho::link},
+                    {lld::Wasm, &lld::wasm::link}});
   linkerOS.flush();
 
   if (result.retCode != 0) {

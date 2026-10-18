@@ -24,7 +24,9 @@ class ScopeManager;
 
 class LLVMCodeGenVisitor : public ASTVisitor {
 public:
-  LLVMCodeGenVisitor(ProgramAST* program, llvm::StringRef programPath);
+  // An empty targetTriple targets the host.
+  LLVMCodeGenVisitor(ProgramAST* program, llvm::StringRef programPath,
+                     llvm::StringRef targetTriple = "");
   ~LLVMCodeGenVisitor();
 
   void codeGen();
@@ -109,6 +111,7 @@ private:
   ClassAST* currentClass = nullptr;
   std::stack<const FunctionAST*> functionStack;
   llvm::StringRef programPath;
+  std::string targetTriple;
 
   std::unordered_map<const ClassAST*, llvm::StructType*> classToStructType;
   std::unordered_map<const ClassAST*, VirtualTable> classToVTable;

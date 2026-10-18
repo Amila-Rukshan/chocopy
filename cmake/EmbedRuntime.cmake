@@ -1,8 +1,8 @@
-# Writes a C++ source that embeds the ChocoPy runtime library and the macOS
-# libSystem stub, so chocopyc ships as a single executable.
+# Writes a C++ source that embeds the ChocoPy runtime libraries (native and
+# wasm) and the macOS libSystem stub, so chocopyc ships as a single executable.
 #
 # Usage: cmake -DOUTPUT=<file.cpp> -DRUNTIME_LIB=<lib.a> -DLIBSYSTEM_STUB=<file.tbd>
-#              -P EmbedRuntime.cmake
+#              -DWASM_RUNTIME=<file.o> -P EmbedRuntime.cmake
 
 function(embed_file name path out_var)
   file(READ "${path}" hex HEX)
@@ -22,6 +22,7 @@ namespace chocopy::embedded {
 ")
 embed_file(runtimeLib "${RUNTIME_LIB}" source)
 embed_file(libSystemStub "${LIBSYSTEM_STUB}" source)
+embed_file(wasmRuntime "${WASM_RUNTIME}" source)
 string(APPEND source "
 } // namespace chocopy::embedded
 ")

@@ -4,6 +4,7 @@
 #include "gtest/gtest.h"
 
 #include "AST.h"
+#include "Backend.h"
 #include "CodeGen.h"
 #include "Lexer.h"
 #include "Parser.h"
@@ -11,9 +12,11 @@
 
 namespace chocopy {
 
-std::string runAndGetOutput(const std::string& binaryFile) {
+// runner is prepended to the command, e.g. to run a wasm module under Node
+std::string runAndGetOutput(const std::string& binaryFile,
+                            const std::string& runner = "") {
   std::string outFile = binaryFile + ".out";
-  std::string runCmd = binaryFile + " > " + outFile;
+  std::string runCmd = runner + binaryFile + " > " + outFile;
   std::system(runCmd.c_str());
 
   std::ifstream out(outFile);
@@ -30,7 +33,10 @@ std::string readFileToString(const std::string& filename) {
   return buffer.str();
 }
 
-TEST(CodeGenTest, MultiplePrograms) {
+// Compiles each test program for targetTriple ("" for the host), runs it and
+// checks its output.
+void checkPrograms(const std::string& targetTriple,
+                   const std::string& binSuffix, const std::string& runner) {
   std::map<std::string, std::string> expectedOutput = {
       {"00", "Hello, World!\n"},
       {"01", "42\nTrue\nFalse\n"},
@@ -104,20 +110,32 @@ TEST(CodeGenTest, MultiplePrograms) {
     }
     ASSERT_TRUE(errors.empty());
 
-    chocopy::LLVMCodeGenVisitor codeGenVisitor(programAST.get(), filename);
+    chocopy::LLVMCodeGenVisitor codeGenVisitor(programAST.get(), filename,
+                                               targetTriple);
     codeGenVisitor.codeGen();
 
-    std::string binFile = filename + ".bin";
+    std::string binFile = filename + binSuffix;
     if (!codeGenVisitor.emitExecutable(binFile)) {
       ADD_FAILURE() << "Failed to build executable";
       continue;
     }
 
-    std::string output = runAndGetOutput(binFile);
+    std::string output = runAndGetOutput(binFile, runner);
     EXPECT_EQ(output, expectedOutput[idx]);
 
     std::remove(binFile.c_str());
   }
+}
+
+TEST(CodeGenTest, MultiplePrograms) { checkPrograms("", ".bin", ""); }
+
+// wasm modules run under Node's WASI, the same engine family as the browsers
+// they target
+TEST(CodeGenTest, MultipleProgramsWasm) {
+  if (std::system("node --version > /dev/null 2>&1") != 0)
+    FAIL() << "node is needed to run wasm modules";
+  checkPrograms(getWasmTargetTriple(), ".wasm",
+                "node --no-warnings tools/run-wasm.mjs ");
 }
 
 } // namespace chocopy

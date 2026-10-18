@@ -28,25 +28,42 @@ static llvm::cl::opt<std::string>
                    llvm::cl::value_desc("filename"),
                    llvm::cl::cat(chocopyCategory));
 
+enum class Target { Native, Wasm };
+
+static llvm::cl::opt<Target> target(
+    "target", llvm::cl::desc("Target to compile for"),
+    llvm::cl::init(Target::Native),
+    llvm::cl::values(
+        clEnumValN(Target::Native, "native", "The host machine (default)"),
+        clEnumValN(Target::Wasm, "wasm32",
+                   "WebAssembly (a WASI module, runs in the browser)")),
+    llvm::cl::cat(chocopyCategory));
+
 enum class EmitKind { Exe, Obj, LLVM };
 
 static llvm::cl::opt<EmitKind> emitKind(
     "emit", llvm::cl::desc("Kind of output to produce"),
     llvm::cl::init(EmitKind::Exe),
     llvm::cl::values(
-        clEnumValN(EmitKind::Exe, "exe", "Native executable (default)"),
-        clEnumValN(EmitKind::Obj, "obj", "Native object file"),
+        clEnumValN(EmitKind::Exe, "exe",
+                   "Executable, or .wasm module for wasm32 (default)"),
+        clEnumValN(EmitKind::Obj, "obj", "Object file"),
         clEnumValN(EmitKind::LLVM, "llvm", "LLVM IR (.ll)")),
     llvm::cl::cat(chocopyCategory));
 
-// foo.py -> foo (exe), foo.o (obj), foo.py.ll (llvm)
-static std::string defaultOutputFilename(llvm::StringRef input, EmitKind kind) {
+// foo.py -> foo (exe), foo.wasm (wasm32 exe), foo.o (obj), foo.py.ll (llvm)
+static std::string defaultOutputFilename(llvm::StringRef input, EmitKind kind,
+                                         Target target) {
   if (input == "-")
     input = "a.py";
   if (kind == EmitKind::LLVM)
     return input.str() + ".ll";
 
   llvm::SmallString<128> output(input);
+  if (kind == EmitKind::Exe && target == Target::Wasm) {
+    llvm::sys::path::replace_extension(output, "wasm");
+    return output.str().str();
+  }
   if (llvm::sys::path::extension(output) == ".py")
     llvm::sys::path::replace_extension(output, "");
   else if (kind == EmitKind::Exe)
@@ -88,11 +105,14 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  chocopy::LLVMCodeGenVisitor codegen(program.get(), inputFilename);
+  std::string targetTriple =
+      target == Target::Wasm ? chocopy::getWasmTargetTriple() : "";
+  chocopy::LLVMCodeGenVisitor codegen(program.get(), inputFilename,
+                                      targetTriple);
   codegen.codeGen();
 
   std::string output = outputFilename.empty()
-                           ? defaultOutputFilename(inputFilename, emitKind)
+                           ? defaultOutputFilename(inputFilename, emitKind, target)
                            : outputFilename.getValue();
   bool ok = false;
   switch (emitKind) {
