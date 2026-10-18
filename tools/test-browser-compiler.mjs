@@ -1,24 +1,32 @@
-// Checks the wasm build of chocopyc (web/chocopyc.js, as the playground uses
-// it) against the native chocopyc's --target=wasm32: for each program, both
-// compilers must produce the same module, and running it (web/chocopy-wasm.js)
-// must print the same output and exit with the same code.
+// Checks the wasm build of chocopyc in the assembled site (chocopyc.js, as the
+// playground uses it; see tools/build-site.mjs) against the native chocopyc's
+// --target=wasm32: for each program, both compilers must produce the same
+// module, and running it (chocopy-wasm.js) must print the same output and
+// exit with the same code.
 //
-// Usage: node tools/test-browser-compiler.mjs [--native=build/bin/chocopyc] prog.py...
+// Usage: node tools/test-browser-compiler.mjs [--site=site]
+//          [--native=build/bin/chocopyc] prog.py...
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { compileChocoPy } from "../web/chocopyc.js";
-import { runChocoPy } from "../web/chocopy-wasm.js";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
+let site = "site";
 let nativeCompiler = "build/bin/chocopyc";
 const files = [];
 for (const arg of process.argv.slice(2)) {
-  if (arg.startsWith("--native="))
+  if (arg.startsWith("--site="))
+    site = arg.slice("--site=".length);
+  else if (arg.startsWith("--native="))
     nativeCompiler = arg.slice("--native=".length);
   else
     files.push(arg);
 }
+
+const siteURL = pathToFileURL(resolve(site) + "/");
+const { compileChocoPy } = await import(new URL("chocopyc.js", siteURL));
+const { runChocoPy } = await import(new URL("chocopy-wasm.js", siteURL));
 
 async function run(wasm) {
   let output = "";

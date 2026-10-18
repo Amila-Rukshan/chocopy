@@ -18,6 +18,6 @@ runtime.o
 /testprograms/*
 !/testprograms/*.py
 
-# chocopyc built with Emscripten, copied here by the wasm build
-/web/compiler/
+# The playground site, assembled by tools/build-site.mjs
+/site/
 /build-wasm/

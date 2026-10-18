@@ -7,7 +7,8 @@ import createChocoPyc from "./compiler/chocopyc.mjs";
 // fresh instance, since LLVM keeps command-line options in global state.
 let compilerModule;
 
-async function loadCompilerModule() {
+// Starts loading the compiler, so the first compile does not wait for it
+export async function loadCompilerModule() {
   if (!compilerModule) {
     const url = new URL("./compiler/chocopyc.wasm", import.meta.url);
     // Node's fetch cannot read files; this lets tests use the same code

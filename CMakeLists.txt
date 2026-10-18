@@ -155,13 +155,6 @@ if(CHOCOPY_WASM_HOST)
     -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 -sALLOW_MEMORY_GROWTH
     -sSTACK_SIZE=8MB -sENVIRONMENT=web,worker,node
     -sEXPORTED_RUNTIME_METHODS=FS,callMain)
-
-  # Served with the playground in web/
-  add_custom_command(TARGET chocopyc POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/web/compiler
-    COMMAND ${CMAKE_COMMAND} -E copy
-            $<TARGET_FILE:chocopyc> $<TARGET_FILE_DIR:chocopyc>/chocopyc.wasm
-            ${CMAKE_SOURCE_DIR}/web/compiler/)
 endif()
 
 if(CHOCOPY_STATIC_LINK AND NOT APPLE)

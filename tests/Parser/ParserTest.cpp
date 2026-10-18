@@ -910,4 +910,22 @@ print(s[len(s)-1])
   ASSERT_EQ(lenFuncCalleeId->getId(), "len");
 }
 
+// The last line does not need to end with a newline
+TEST(ParserTest, TestNoNewlineAtEndOfFile) {
+  for (std::string program :
+       {"x: int = 1\nprint(x)", "if x:\n    print(1)\nelse:\n    pass",
+        "def f() -> int:\n    return 1"}) {
+    SCOPED_TRACE(program);
+    LexerBuffer lexer(program.c_str(), program.c_str() + program.size(),
+                      "test.py");
+    Parser parser(lexer);
+
+    auto programAST = parser.parseProgram();
+    ASSERT_NE(programAST, nullptr);
+    EXPECT_EQ(programAST->getVarDefs().size() + programAST->getStmts().size() +
+                  programAST->getFuncDefs().size(),
+              program[0] == 'x' ? 2 : 1);
+  }
+}
+
 } // namespace chocopy

@@ -1,0 +1,150 @@
+/* Follows developerdiary.me: Raleway headings and UI text over Georgia body
+   text in one centered column, and black buttons. */
+
+:root {
+  --text: rgba(0, 0, 0, 0.8);
+  --muted: #6c757d;
+  --border: #dee2e6;
+  --surface: #f8f9fa;
+  --code-bg: #eceef0;
+  --link: #007bff;
+  --link-hover: #0056b3;
+  --black: #000;
+  --error: #c0392b;
+  --mono: SFMono-Regular, Consolas, "Roboto Mono", "Droid Sans Mono", "Liberation Mono", Menlo, Courier, monospace;
+  --ui: Raleway, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Syntax colors: muted tones that read on a light background */
+  --tok-keyword: #a8526b;
+  --tok-string: #4f7f45;
+  --tok-number: #9a6f12;
+  --tok-constant: #9a6f12;
+  --tok-comment: #8a918e;
+  --tok-function: #3f6f94;
+  --tok-class: #3f6f94;
+  --tok-builtin: #7458a0;
+  --tok-type: #2f7f78;
+}
+
+* { box-sizing: border-box; }
+
+html { font: 112.5%/1.45em georgia, serif; }
+@media (max-width: 480px) { html { font-size: 100%; } }
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: #fff;
+  font-family: georgia, serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--link); text-decoration: none; }
+a:hover { color: var(--link-hover); text-decoration: underline; }
+
+/* Layout: one centered column */
+
+main, footer {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 0;
+}
+
+h1 {
+  margin: 0 0 0.75rem;
+  font: 600 1.75rem/1.2 var(--ui);
+}
+p { font-family: var(--ui); }
+.intro { margin: 0 0 1rem; }
+code { font-family: var(--mono); font-size: 0.9em; background: rgba(0, 0, 0, 0.04); border-radius: 3px; padding: 0.1em 0.3em; }
+
+/* Editor: a transparent textarea over the highlighted code */
+
+.editor {
+  position: relative;
+  height: 18rem;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+}
+.editor pre, .editor textarea {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0.75rem;
+  overflow: auto;
+  border: 0;
+  font: 14px/1.5 var(--mono);
+  tab-size: 4;
+  white-space: pre;
+  word-wrap: normal;
+}
+.editor pre { pointer-events: none; color: var(--text); }
+.editor pre code { font: inherit; background: none; padding: 0; border-radius: 0; }
+.editor textarea {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--black);
+  outline: none;
+}
+.editor:focus-within { border-color: #adb5bd; }
+.editor textarea::selection { background: rgba(0, 0, 0, 0.12); }
+
+.tok-keyword { color: var(--tok-keyword); }
+.tok-string { color: var(--tok-string); }
+.tok-number { color: var(--tok-number); }
+.tok-constant { color: var(--tok-constant); }
+.tok-comment { color: var(--tok-comment); font-style: italic; }
+.tok-function { color: var(--tok-function); }
+.tok-class { color: var(--tok-class); }
+.tok-builtin { color: var(--tok-builtin); }
+.tok-type { color: var(--tok-type); }
+
+/* Toolbar and output */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+  font-family: var(--ui);
+}
+.btn {
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--black);
+  border-radius: 0;
+  background: var(--black);
+  color: #fff;
+  font: 0.9rem var(--ui);
+  cursor: pointer;
+}
+.btn:hover { background: #23272b; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn-outline { background: #fff; color: var(--black); }
+.btn-outline:hover { background: var(--surface); }
+.hint { color: var(--muted); font-size: 0.8rem; }
+#status { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
+
+.output {
+  min-height: 8rem;
+  max-height: 24rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: 14px/1.5 var(--mono);
+  white-space: pre-wrap;
+}
+.output .error { color: var(--error); }
+.output .note { color: var(--muted); }
+
+footer {
+  padding-bottom: 2rem;
+  color: var(--muted);
+  font: 0.8rem var(--ui);
+}

@@ -33,3 +33,10 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  # Also keeps the LLVM-for-wasm build cached on main, where release (tag)
+  # runs can restore it
+  wasm:
+    uses: ./.github/workflows/wasm.yml
+    with:
+      package: chocopy-${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}-wasm

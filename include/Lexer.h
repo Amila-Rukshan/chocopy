@@ -60,14 +60,23 @@ public:
 
 private:
   /// Delegate to a derived class fetching the next line. Returns an empty
-  /// string to signal end of file (EOF). Lines are expected to always finish
-  /// with "\n"
+  /// string to signal end of file (EOF). Lines finish with "\n", except the
+  /// last one may not.
   virtual llvm::StringRef readNextLine() = 0;
 
   int getNextChar() {
     // The current line buffer should not be empty unless it is the end of file.
-    if (curLineBuffer.empty())
+    if (curLineBuffer.empty()) {
+      // Like Python, a missing newline at the end of the file is treated as
+      // if it were there: the parser expects every line to end with one.
+      if (!lastCharWasNewline) {
+        lastCharWasNewline = true;
+        ++curLineNum;
+        curCol = 0;
+        return '\n';
+      }
       return EOF;
+    }
     ++curCol;
     auto nextchar = curLineBuffer.front();
     curLineBuffer = curLineBuffer.drop_front();
@@ -78,6 +87,7 @@ private:
       ++curLineNum;
       curCol = 0;
     }
+    lastCharWasNewline = nextchar == '\n';
     return static_cast<unsigned char>(nextchar);
   }
 
@@ -448,6 +458,7 @@ private:
     int currentLineIndentLevel;
     bool processingLeadingSpaces;
     bool indentDenentDone;
+    bool lastCharWasNewline;
   };
 
   LexerState saveState() const {
@@ -465,7 +476,8 @@ private:
                       prevLineIndentLevel,
                       currentLineIndentLevel,
                       processingLeadingSpaces,
-                      indentDenentDone};
+                      indentDenentDone,
+                      lastCharWasNewline};
   }
 
   void restoreState(const LexerState& state) {
@@ -484,6 +496,7 @@ private:
     currentLineIndentLevel = state.currentLineIndentLevel;
     processingLeadingSpaces = state.processingLeadingSpaces;
     indentDenentDone = state.indentDenentDone;
+    lastCharWasNewline = state.lastCharWasNewline;
   }
 
   Location lastLocation;
@@ -507,6 +520,8 @@ private:
 
   bool processingLeadingSpaces = true;
   bool indentDenentDone = false;
+  // Whether the last character read was "\n", to add one missing at the end
+  bool lastCharWasNewline = true;
 };
 
 class LexerBuffer final : public Lexer {

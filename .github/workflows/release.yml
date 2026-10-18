@@ -70,15 +70,18 @@ jobs:
 
   release:
     name: Publish release
-    needs: build
+    # The wasm compiler package is built by the test workflow
+    needs: [test, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
 
     steps:
+      # The compiler packages, not the site's github-pages artifact
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: chocopy-*
           merge-multiple: true
 
       - name: Checksums
@@ -93,3 +96,19 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes
+
+  # The playground, built by the test workflow alongside the wasm compiler
+  pages:
+    name: Deploy the playground
+    needs: release
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

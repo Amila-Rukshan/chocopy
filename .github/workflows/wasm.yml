@@ -1,0 +1,98 @@
+name: Wasm compiler
+
+# Builds chocopyc to WebAssembly and the playground site around it, checks
+# the wasm compiler against the native one, and uploads:
+#   - <package>.tar.gz: the compiler and its JS wrappers (a release asset)
+#   - the site, as the GitHub Pages artifact
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: Name of the compiler package
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  # The version the wasm build is tested with; LLVM is rebuilt when it changes
+  EMSDK_VERSION: 4.0.16
+  LLVM_WASM_DIR: ${{ github.workspace }}/../llvm-wasm
+
+jobs:
+  wasm:
+    name: Build wasm compiler and site
+    runs-on: ubuntu-24.04
+    env:
+      PACKAGE: ${{ inputs.package }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Native LLVM 17: its llvm-tblgen builds LLVM, its clang the wasm runtime
+      - uses: ./.github/actions/setup
+
+      - name: Install Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$EMSDK_VERSION"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$EMSDK_VERSION"
+          echo "EMSDK_ENV=$RUNNER_TEMP/emsdk/emsdk_env.sh" >> "$GITHUB_ENV"
+
+      # Building LLVM for wasm takes a while; only its install tree is kept
+      - name: Cache LLVM for wasm
+        id: llvm-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LLVM_WASM_DIR }}/install
+          key: llvm-wasm-${{ env.EMSDK_VERSION }}-${{ hashFiles('tools/build-llvm-wasm.sh') }}
+
+      - name: Build LLVM for wasm
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        env:
+          CHOCOPY_LLVM_WASM_DIR: ${{ env.LLVM_WASM_DIR }}
+          NATIVE_LLVM_CONFIG: /usr/lib/llvm-17/bin/llvm-config
+        run: |
+          # shellcheck source=/dev/null
+          source "$EMSDK_ENV"
+          tools/build-llvm-wasm.sh
+
+      - name: Build the wasm compiler
+        run: |
+          # shellcheck source=/dev/null
+          source "$EMSDK_ENV"
+          emcmake cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DLLVM_DIR="$LLVM_WASM_DIR/install/lib/cmake/llvm" \
+            -DLLD_DIR="$LLVM_WASM_DIR/install/lib/cmake/lld"
+          cmake --build build-wasm
+
+      - name: Build the site
+        run: node tools/build-site.mjs --out=site
+
+      # The native compiler is the reference the wasm one is compared with
+      - name: Build the native compiler
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target chocopyc
+
+      - name: Test the wasm compiler
+        run: node tools/test-browser-compiler.mjs --site=site testprograms/chocopy_*.py
+
+      # The same layout as in the site: chocopyc.js loads compiler/
+      - name: Package
+        run: |
+          mkdir -p "$PACKAGE/compiler"
+          cp site/compiler/chocopyc.mjs site/compiler/chocopyc.wasm "$PACKAGE/compiler/"
+          cp site/chocopyc.js site/chocopy-wasm.js README.md "$PACKAGE/"
+          tar -czf "$PACKAGE.tar.gz" "$PACKAGE"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE }}
+          path: ${{ env.PACKAGE }}.tar.gz
+          if-no-files-found: error
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site

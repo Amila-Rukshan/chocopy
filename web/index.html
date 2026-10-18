@@ -4,79 +4,138 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ChocoPy Playground</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }
-    textarea, pre { box-sizing: border-box; width: 100%; font: 14px/1.4 ui-monospace, monospace; }
-    textarea { height: 16rem; padding: 0.75rem; }
-    pre { background: #f4f4f4; padding: 0.75rem; min-height: 6rem; white-space: pre-wrap; }
-    .bar { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; flex-wrap: wrap; }
-    #status { color: #666; }
-  </style>
+  <meta name="description" content="Compile and run ChocoPy, a statically typed subset of Python, in your browser. The LLVM-based compiler runs as WebAssembly.">
+  <link href="https://fonts.googleapis.com/css?family=Raleway:400,600|Source+Sans+Pro:300,400,400i,700" rel="stylesheet">
+  <link href="style.css" rel="stylesheet">
 </head>
 <body>
-  <h1>ChocoPy Playground</h1>
-  <p>The ChocoPy compiler runs in your browser: it compiles the program to WebAssembly, which is then run here.</p>
-  <textarea id="source" spellcheck="false">def fib(n: int) -> int:
-    if n &lt; 2:
-        return n
-    return fib(n - 1) + fib(n - 2)
+  <main>
+    <h1>ChocoPy Playground</h1>
+    <p class="intro">The ChocoPy compiler runs in your browser: it compiles the program to WebAssembly, which is then run here.</p>
 
-i: int = 0
-while i &lt; 10:
-    print(fib(i))
-    i = i + 1
+    <div class="editor">
+      <pre aria-hidden="true"><code id="highlight"></code></pre>
+      <textarea id="source" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="ChocoPy source code"># Print the even numbers in a list and add them up
+
+class Counter(object):
+    count: int = 0
+
+    def add(self: "Counter", n: int):
+        self.count = self.count + n
+
+def is_even(n: int) -&gt; bool:
+    return n % 2 == 0
+
+numbers: [int] = None
+c: Counter = None
+x: int = 0
+
+numbers = [1, 2, 3, 4, 5, 6]
+c = Counter()
+for x in numbers:
+    if is_even(x):
+        c.add(x)
+        print(x)
+print("Sum of evens:")
+print(c.count)
 </textarea>
-  <div class="bar">
-    <button id="run">Compile &amp; run</button>
-    <span id="status"></span>
-  </div>
-  <pre id="output"></pre>
-  <p>Or run a module built with <code>chocopyc --target=wasm32 prog.py</code>:
-    <input type="file" id="file" accept=".wasm"></p>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn" id="run">Compile &amp; Run</button>
+      <button class="btn btn-outline" id="stop" disabled>Stop</button>
+      <span class="hint">Ctrl/⌘ + Enter</span>
+      <span id="status">Loading the compiler…</span>
+    </div>
+
+    <pre class="output" id="output" aria-live="polite"></pre>
+  </main>
+
+  <footer>
+    Built with LLVM and lld compiled to WebAssembly.
+    Source on <a href="https://github.com/Amila-Rukshan/chocopy">GitHub</a>.
+  </footer>
 
   <script type="module">
-    import { runChocoPy } from "./chocopy-wasm.js";
+    import { createEditor } from "./editor.js";
 
-    const source = document.getElementById("source");
     const output = document.getElementById("output");
     const status = document.getElementById("status");
     const runButton = document.getElementById("run");
+    const stopButton = document.getElementById("stop");
 
-    async function run(wasm) {
-      output.textContent = "";
-      const code = await runChocoPy(wasm, (text) => { output.textContent += text; });
-      if (code !== 0)
-        output.textContent += `\n[exited with code ${code}]`;
+    const editor = createEditor(
+      document.getElementById("source"),
+      document.getElementById("highlight"),
+      { onRun: run });
+
+    function print(text, className) {
+      if (className) {
+        const span = document.createElement("span");
+        span.className = className;
+        span.textContent = text;
+        output.append(span);
+      } else {
+        output.append(text);
+      }
+      output.scrollTop = output.scrollHeight;
     }
 
-    runButton.addEventListener("click", async () => {
-      runButton.disabled = true;
-      try {
-        // Loaded on first use: the compiler is a large download
-        status.textContent = "Loading the compiler…";
-        const { compileChocoPy } = await import("./chocopyc.js");
-        status.textContent = "Compiling…";
-        const start = performance.now();
-        const { wasm, diagnostics } = await compileChocoPy(source.value);
-        const ms = Math.round(performance.now() - start);
-        if (!wasm) {
-          status.textContent = "Compilation failed";
-          output.textContent = diagnostics;
-          return;
-        }
-        status.textContent = `Compiled in ${ms} ms (${wasm.length} bytes)`;
-        await run(wasm);
-      } catch (e) {
-        status.textContent = "Error";
-        output.textContent = String(e);
-      } finally {
-        runButton.disabled = false;
-      }
-    });
+    function setRunning(running) {
+      runButton.disabled = running;
+      stopButton.disabled = !running;
+    }
 
-    document.getElementById("file").addEventListener("change", async (event) => {
-      status.textContent = "";
-      await run(await event.target.files[0].arrayBuffer());
+    // Compiling and running happen in a worker; stopping a program that does
+    // not end means terminating it, so a new one is started
+    let worker;
+    function startWorker() {
+      worker = new Worker("./worker.js", { type: "module" });
+      worker.onmessage = ({ data }) => {
+        switch (data.type) {
+        case "status":
+          status.textContent = data.text;
+          break;
+        case "output":
+          print(data.text);
+          break;
+        case "compileError":
+          status.textContent = "Compilation failed";
+          print(data.diagnostics, "error");
+          setRunning(false);
+          break;
+        case "done":
+          status.textContent = `Compiled in ${data.compileMs} ms (${data.size} bytes of wasm)`;
+          if (data.exitCode !== 0)
+            print(`\n[exited with code ${data.exitCode}]`, "note");
+          setRunning(false);
+          break;
+        case "error":
+          status.textContent = "Error";
+          print(data.text, "error");
+          setRunning(false);
+          break;
+        }
+      };
+      worker.postMessage({ type: "load" });
+    }
+    startWorker();
+
+    function run() {
+      if (runButton.disabled)
+        return;
+      output.textContent = "";
+      setRunning(true);
+      worker.postMessage({ type: "run", source: editor.value, fileName: "program.py" });
+    }
+
+    runButton.addEventListener("click", run);
+    stopButton.addEventListener("click", () => {
+      worker.terminate();
+      print("\n[stopped]", "note");
+      status.textContent = "Stopped";
+      setRunning(false);
+      startWorker();
     });
   </script>
 </body>
