@@ -30,6 +30,16 @@ static llvm::cl::opt<std::string>
 
 enum class Target { Native, Wasm };
 
+#ifdef CHOCOPY_WASM_HOST
+// chocopyc running as wasm (in the browser) only compiles to wasm
+static llvm::cl::opt<Target> target(
+    "target", llvm::cl::desc("Target to compile for"),
+    llvm::cl::init(Target::Wasm),
+    llvm::cl::values(clEnumValN(
+        Target::Wasm, "wasm32",
+        "WebAssembly (a WASI module, runs in the browser) (default)")),
+    llvm::cl::cat(chocopyCategory));
+#else
 static llvm::cl::opt<Target> target(
     "target", llvm::cl::desc("Target to compile for"),
     llvm::cl::init(Target::Native),
@@ -38,6 +48,7 @@ static llvm::cl::opt<Target> target(
         clEnumValN(Target::Wasm, "wasm32",
                    "WebAssembly (a WASI module, runs in the browser)")),
     llvm::cl::cat(chocopyCategory));
+#endif
 
 enum class EmitKind { Exe, Obj, LLVM };
 

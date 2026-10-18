@@ -1,6 +1,7 @@
 #ifndef CHOCOPY_PARSER_H
 #define CHOCOPY_PARSER_H
 
+#include <cstdlib>
 #include <iostream>
 
 #include "AST.h"
@@ -732,7 +733,7 @@ private:
   /// Helper function to signal errors while parsing, it takes an argument
   /// indicating the expected token and another argument giving more context.
   /// Location is retrieved from the lexer to enrich the error message.
-  /// Gracefully returns nullptr to signal the error.
+  /// The parser does not recover from errors, so compilation stops here.
   template <typename R, typename T, typename U = const char*>
   std::unique_ptr<R> parseError(T&& expected, U&& context = "") {
     auto curToken = lexer.getCurToken();
@@ -741,7 +742,7 @@ private:
                  << "' " << context << " but has Token "
                  << " '" << tokenKindToString(curToken) << "'"
                  << "\n";
-    return nullptr;
+    std::exit(1);
   }
 };
 

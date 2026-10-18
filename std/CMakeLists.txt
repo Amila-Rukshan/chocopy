@@ -1,17 +1,26 @@
-add_library(ChocopySupport STATIC string.c runtime.c)
+# The native runtime; a wasm-hosted chocopyc only compiles to wasm
+if(NOT CHOCOPY_WASM_HOST)
+  add_library(ChocopySupport STATIC string.c runtime.c)
 
-# Generated programs are linked as position-independent executables
-set_target_properties(ChocopySupport PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  # Generated programs are linked as position-independent executables
+  set_target_properties(ChocopySupport PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-if(APPLE)
-  target_compile_options(ChocopySupport PRIVATE -mmacosx-version-min=${CHOCOPY_MACOS_MIN_VERSION})
+  if(APPLE)
+    target_compile_options(ChocopySupport PRIVATE -mmacosx-version-min=${CHOCOPY_MACOS_MIN_VERSION})
+  endif()
 endif()
 
 # Runtime for programs compiled to WebAssembly. The host C compiler may not
-# target wasm (Apple clang does not), so it is built with LLVM's own clang.
+# target wasm (Apple clang does not), so it is built with LLVM 17's own clang,
+# which matches the wasm-ld it is linked with. A wasm-hosted build's LLVM has
+# no clang, so the native LLVM 17 install locations are searched too.
 find_program(CHOCOPY_WASM_CLANG NAMES clang clang-17
-  HINTS ${LLVM_TOOLS_BINARY_DIR} NO_DEFAULT_PATH)
-find_program(CHOCOPY_WASM_CLANG NAMES clang-17 clang)
+  HINTS ${LLVM_TOOLS_BINARY_DIR}
+        /opt/homebrew/opt/llvm@17/bin
+        /usr/local/opt/llvm@17/bin
+        /usr/lib/llvm-17/bin
+  NO_DEFAULT_PATH)
+find_program(CHOCOPY_WASM_CLANG NAMES clang-17)
 if(NOT CHOCOPY_WASM_CLANG)
   message(FATAL_ERROR "clang with the WebAssembly target is needed to build the wasm runtime")
 endif()

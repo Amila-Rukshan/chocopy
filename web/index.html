@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChocoPy Playground</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }
+    textarea, pre { box-sizing: border-box; width: 100%; font: 14px/1.4 ui-monospace, monospace; }
+    textarea { height: 16rem; padding: 0.75rem; }
+    pre { background: #f4f4f4; padding: 0.75rem; min-height: 6rem; white-space: pre-wrap; }
+    .bar { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; flex-wrap: wrap; }
+    #status { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>ChocoPy Playground</h1>
+  <p>The ChocoPy compiler runs in your browser: it compiles the program to WebAssembly, which is then run here.</p>
+  <textarea id="source" spellcheck="false">def fib(n: int) -> int:
+    if n &lt; 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+i: int = 0
+while i &lt; 10:
+    print(fib(i))
+    i = i + 1
+</textarea>
+  <div class="bar">
+    <button id="run">Compile &amp; run</button>
+    <span id="status"></span>
+  </div>
+  <pre id="output"></pre>
+  <p>Or run a module built with <code>chocopyc --target=wasm32 prog.py</code>:
+    <input type="file" id="file" accept=".wasm"></p>
+
+  <script type="module">
+    import { runChocoPy } from "./chocopy-wasm.js";
+
+    const source = document.getElementById("source");
+    const output = document.getElementById("output");
+    const status = document.getElementById("status");
+    const runButton = document.getElementById("run");
+
+    async function run(wasm) {
+      output.textContent = "";
+      const code = await runChocoPy(wasm, (text) => { output.textContent += text; });
+      if (code !== 0)
+        output.textContent += `\n[exited with code ${code}]`;
+    }
+
+    runButton.addEventListener("click", async () => {
+      runButton.disabled = true;
+      try {
+        // Loaded on first use: the compiler is a large download
+        status.textContent = "Loading the compiler…";
+        const { compileChocoPy } = await import("./chocopyc.js");
+        status.textContent = "Compiling…";
+        const start = performance.now();
+        const { wasm, diagnostics } = await compileChocoPy(source.value);
+        const ms = Math.round(performance.now() - start);
+        if (!wasm) {
+          status.textContent = "Compilation failed";
+          output.textContent = diagnostics;
+          return;
+        }
+        status.textContent = `Compiled in ${ms} ms (${wasm.length} bytes)`;
+        await run(wasm);
+      } catch (e) {
+        status.textContent = "Error";
+        output.textContent = String(e);
+      } finally {
+        runButton.disabled = false;
+      }
+    });
+
+    document.getElementById("file").addEventListener("change", async (event) => {
+      status.textContent = "";
+      await run(await event.target.files[0].arrayBuffer());
+    });
+  </script>
+</body>
+</html>

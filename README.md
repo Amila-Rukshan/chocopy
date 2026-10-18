@@ -72,7 +72,25 @@ On macOS, generated programs link against [`std/libSystem.tbd`](./std/libSystem.
 node tools/run-wasm.mjs prog.wasm              # or: wasmtime prog.wasm
 ```
 
-In the browser, [`web/chocopy-wasm.js`](./web/chocopy-wasm.js) provides those two imports; serve the `web/` directory (`python3 -m http.server -d web`) and open `index.html` to run a `.wasm` file.
+In the browser, [`web/chocopy-wasm.js`](./web/chocopy-wasm.js) provides those two imports.
+
+### Compiler in the browser
+
+`chocopyc` itself can be built to WebAssembly with [Emscripten](https://emscripten.org), so the playground in [`web/`](./web) compiles and runs ChocoPy entirely in the browser. It needs LLVM and lld built for wasm first; [`tools/build-llvm-wasm.sh`](./tools/build-llvm-wasm.sh) builds just the parts `chocopyc` uses (the WebAssembly target and lld's wasm linker) into `~/.cache/chocopy-llvm-wasm`:
+
+```sh
+source ~/emsdk/emsdk_env.sh
+tools/build-llvm-wasm.sh                        # once; LLVM 17 for wasm
+
+LLVM_WASM=~/.cache/chocopy-llvm-wasm/install
+emcmake cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel \
+  -DLLVM_DIR=$LLVM_WASM/lib/cmake/llvm -DLLD_DIR=$LLVM_WASM/lib/cmake/lld
+cmake --build build-wasm                        # copies chocopyc into web/compiler/
+
+python3 -m http.server -d web                   # open http://localhost:8000
+```
+
+The native `llvm@17` install is still needed: its `llvm-tblgen` is used while building LLVM, and its `clang` builds the wasm runtime. The wasm build of `chocopyc` produces the same modules as the native `chocopyc --target=wasm32`; `node tools/test-browser-compiler.mjs testprograms/chocopy_*.py` checks that for every test program.
 
 ## TODOS
 

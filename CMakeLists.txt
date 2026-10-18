@@ -21,6 +21,13 @@ include(HandleLLVMOptions)
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
+# Match LLVM's RTTI setting, or classes deriving from LLVM's (cl::opt) need
+# typeinfo LLVM does not provide. Homebrew's LLVM has RTTI; the wasm build of
+# tools/build-llvm-wasm.sh does not.
+if(NOT LLVM_ENABLE_RTTI)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>)
+endif()
+
 # compile_commands.json for clangd and other editor tooling
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -39,24 +46,38 @@ option(CHOCOPY_STATIC_LINK
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+# Built with Emscripten, chocopyc itself runs in the browser (or Node) and
+# only compiles to wasm: native targets and their runtimes are left out.
+if(EMSCRIPTEN)
+  set(CHOCOPY_WASM_HOST ON)
+endif()
+
 # Runtime library linked into every compiled ChocoPy program
 add_subdirectory(std)
 
 # The runtime libraries and the macOS libSystem stub are compiled into
 # chocopyc, so it ships as a single executable
 set(_embedded_runtime ${CMAKE_BINARY_DIR}/EmbeddedRuntime.cpp)
+if(CHOCOPY_WASM_HOST)
+  set(_embed_args -DWASM_RUNTIME=${CHOCOPY_WASM_RUNTIME})
+  set(_embed_depends ChocopyWasmRuntime ${CHOCOPY_WASM_RUNTIME})
+else()
+  set(_embed_args
+    -DRUNTIME_LIB=$<TARGET_FILE:ChocopySupport>
+    -DLIBSYSTEM_STUB=${CMAKE_SOURCE_DIR}/std/libSystem.tbd
+    -DWASM_RUNTIME=${CHOCOPY_WASM_RUNTIME})
+  set(_embed_depends
+    ChocopySupport $<TARGET_FILE:ChocopySupport>
+    ChocopyWasmRuntime ${CHOCOPY_WASM_RUNTIME}
+    ${CMAKE_SOURCE_DIR}/std/libSystem.tbd)
+endif()
 add_custom_command(
   OUTPUT ${_embedded_runtime}
   COMMAND ${CMAKE_COMMAND}
           -DOUTPUT=${_embedded_runtime}
-          -DRUNTIME_LIB=$<TARGET_FILE:ChocopySupport>
-          -DLIBSYSTEM_STUB=${CMAKE_SOURCE_DIR}/std/libSystem.tbd
-          -DWASM_RUNTIME=${CHOCOPY_WASM_RUNTIME}
+          ${_embed_args}
           -P ${CMAKE_SOURCE_DIR}/cmake/EmbedRuntime.cmake
-  DEPENDS ChocopySupport $<TARGET_FILE:ChocopySupport>
-          ChocopyWasmRuntime
-          ${CMAKE_SOURCE_DIR}/std/libSystem.tbd
-          ${CHOCOPY_WASM_RUNTIME}
+  DEPENDS ${_embed_depends}
           ${CMAKE_SOURCE_DIR}/cmake/EmbedRuntime.cmake
   COMMENT "Embedding the ChocoPy runtime")
 
@@ -73,7 +94,15 @@ target_compile_definitions(ChocoPyCompiler
 
 target_include_directories(ChocoPyCompiler PUBLIC ${LLD_INCLUDE_DIRS})
 
-set(_lld_libs lldCommon lldELF lldMachO lldWasm)
+if(CHOCOPY_WASM_HOST)
+  target_compile_definitions(ChocoPyCompiler PUBLIC CHOCOPY_WASM_HOST)
+  set(_lld_libs lldCommon lldWasm)
+  set(_llvm_targets WebAssembly)
+else()
+  set(_lld_libs lldCommon lldELF lldMachO lldWasm)
+  set(_llvm_targets native WebAssembly)
+endif()
+
 if(CHOCOPY_STATIC_LINK)
   # On Linux, zlib and terminfo are linked statically too, leaving only libc
   # (macOS ships both as system libraries).
@@ -108,12 +137,32 @@ endif()
 target_link_libraries(ChocoPyCompiler PUBLIC ${_lld_libs})
 
 llvm_config(ChocoPyCompiler ${_llvm_use_shared}
-  native WebAssembly Core Support TargetParser MC Target Passes
+  ${_llvm_targets} Core Support TargetParser MC Target Passes
   ${_lld_components})
 
 add_executable(chocopyc ChocoPy.cpp)
 
 target_link_libraries(chocopyc PRIVATE ChocoPyCompiler)
+
+if(CHOCOPY_WASM_HOST)
+  # An ES module exporting a factory (createChocoPyc) that instantiates the
+  # compiler; JS writes the source into its in-memory file system, calls
+  # callMain with the usual arguments and reads the .wasm back. LLVM needs a
+  # bigger stack than Emscripten's default.
+  set_target_properties(chocopyc PROPERTIES SUFFIX ".mjs")
+  target_link_options(chocopyc PRIVATE
+    -sMODULARIZE -sEXPORT_ES6 -sEXPORT_NAME=createChocoPyc
+    -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 -sALLOW_MEMORY_GROWTH
+    -sSTACK_SIZE=8MB -sENVIRONMENT=web,worker,node
+    -sEXPORTED_RUNTIME_METHODS=FS,callMain)
+
+  # Served with the playground in web/
+  add_custom_command(TARGET chocopyc POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/web/compiler
+    COMMAND ${CMAKE_COMMAND} -E copy
+            $<TARGET_FILE:chocopyc> $<TARGET_FILE_DIR:chocopyc>/chocopyc.wasm
+            ${CMAKE_SOURCE_DIR}/web/compiler/)
+endif()
 
 if(CHOCOPY_STATIC_LINK AND NOT APPLE)
   target_link_options(chocopyc PRIVATE -static-libstdc++ -static-libgcc)

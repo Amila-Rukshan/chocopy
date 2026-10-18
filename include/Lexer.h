@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <string>
 
 #include "Token.h"
@@ -36,14 +37,16 @@ public:
     return tokenKind;
   }
 
+  // A mismatch is a syntax error. The parser does not recover from errors,
+  // so compilation stops at the first one.
   void consume(TokenKind tok) {
     if (tok != curTok) {
       llvm::errs() << "Token mismatch: expected " << tokenKindToString(tok)
                    << ", but got " << tokenKindToString(curTok) << "\n";
       llvm::errs() << *lastLocation.file << ":" << lastLocation.line << ":"
                    << lastLocation.col << "\n";
+      std::exit(1);
     }
-    assert(tok == curTok && "consume Token mismatch expectation");
     getNextToken();
   }
 

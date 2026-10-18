@@ -17,3 +17,7 @@ runtime.o
 # compiler outputs next to test programs (executables, objects, IR)
 /testprograms/*
 !/testprograms/*.py
+
+# chocopyc built with Emscripten, copied here by the wasm build
+/web/compiler/
+/build-wasm/
